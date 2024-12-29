@@ -1,0 +1,4244 @@
+Ruta al script: lib/configuracion/app_settings.dart
+Nombre del script: app_settings.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/constants.dart';
+
+enum TimeFormat { h12, h24 }
+enum InputFormat { numpad, circular }
+
+class AppSettings with ChangeNotifier {
+  late SharedPreferences _prefs;
+  TimeFormat _timeFormat = TimeFormat.h24;
+  InputFormat _inputFormat = InputFormat.circular;
+  double _alarmVolume = 1.0;
+  bool _vibrationEnabled = true;
+  
+  // Getters
+  TimeFormat get timeFormat => _timeFormat;
+  InputFormat get inputFormat => _inputFormat;
+  double get alarmVolume => _alarmVolume;
+  bool get vibrationEnabled => _vibrationEnabled;
+  
+  AppSettings() {
+    _loadSettings();
+  }
+  
+  Future<void> _loadSettings() async {
+    _prefs = await SharedPreferences.getInstance();
+    
+    // Cargar formato de hora
+    final String? timeFormatString = _prefs.getString(AppConstants.keyTimeFormat);
+    if (timeFormatString != null) {
+      _timeFormat = TimeFormat.values.firstWhere(
+        (e) => e.toString() == timeFormatString,
+        orElse: () => TimeFormat.h24,
+      );
+    }
+    
+    // Cargar formato de entrada
+    _inputFormat = _prefs.getBool(AppConstants.keyUseNumpad) == true
+        ? InputFormat.numpad
+        : InputFormat.circular;
+    
+    // Cargar volumen
+    _alarmVolume = _prefs.getDouble(AppConstants.keyAlarmVolume) ?? 1.0;
+    
+    // Cargar vibración
+    _vibrationEnabled = _prefs.getBool(AppConstants.keyVibrationEnabled) ?? true;
+    
+    notifyListeners();
+  }
+  
+  Future<void> setTimeFormat(TimeFormat format) async {
+    _timeFormat = format;
+    await _prefs.setString(AppConstants.keyTimeFormat, format.toString());
+    notifyListeners();
+  }
+  
+  Future<void> setInputFormat(InputFormat format) async {
+    _inputFormat = format;
+    await _prefs.setBool(
+      AppConstants.keyUseNumpad,
+      format == InputFormat.numpad,
+    );
+    notifyListeners();
+  }
+  
+  Future<void> setAlarmVolume(double volume) async {
+    _alarmVolume = volume;
+    await _prefs.setDouble(AppConstants.keyAlarmVolume, volume);
+    notifyListeners();
+  }
+  
+  Future<void> setVibrationEnabled(bool enabled) async {
+    _vibrationEnabled = enabled;
+    await _prefs.setBool(AppConstants.keyVibrationEnabled, enabled);
+    notifyListeners();
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/configuracion/theme_provider.dart
+Nombre del script: theme_provider.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/constants.dart';
+
+class ThemeProvider with ChangeNotifier {
+  ThemeMode _themeMode = ThemeMode.system;
+  late SharedPreferences _prefs;
+  
+  ThemeProvider() {
+    _loadPreferences();
+  }
+  
+  ThemeMode get themeMode => _themeMode;
+  
+  Future<void> _loadPreferences() async {
+    _prefs = await SharedPreferences.getInstance();
+    final String? themeModeString = _prefs.getString(AppConstants.keyThemeMode);
+    if (themeModeString != null) {
+      _themeMode = ThemeMode.values.firstWhere(
+        (e) => e.toString() == themeModeString,
+        orElse: () => ThemeMode.system,
+      );
+      notifyListeners();
+    }
+  }
+  
+  Future<void> setThemeMode(ThemeMode mode) async {
+    _themeMode = mode;
+    await _prefs.setString(AppConstants.keyThemeMode, mode.toString());
+    notifyListeners();
+  }
+  
+  ThemeData getLightTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: const ColorScheme.light(
+        primary: AppConstants.primaryLightColor,
+        secondary: AppConstants.accentLightColor,
+      ),
+      // Personaliza más aspectos del tema aquí
+    );
+  }
+  
+  ThemeData getDarkTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: const ColorScheme.dark(
+        primary: AppConstants.primaryDarkColor,
+        secondary: AppConstants.accentDarkColor,
+      ),
+      // Personaliza más aspectos del tema aquí
+    );
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/models/alarm.dart
+Nombre del script: alarm.dart
+Contenido del script:
+import 'dart:convert';
+
+class Alarm {
+  final String id;
+  String name;
+  DateTime time;
+  bool isEnabled;
+  List<bool> weekDays; // [lun, mar, mie, jue, vie, sab, dom]
+  bool isOneTime;
+  int snoozeTime; // en minutos
+  int snoozeCount;
+  int maxSnoozeCount;
+  String? selectedGame; // 'math' o 'memory'
+  String? gameDifficulty; // 'easy', 'medium', 'hard'
+  bool requireGame;
+  
+  Alarm({
+    required this.id,
+    this.name = '',
+    required this.time,
+    this.isEnabled = true,
+    List<bool>? weekDays,
+    this.isOneTime = false,
+    this.snoozeTime = 5,
+    this.snoozeCount = 0,
+    this.maxSnoozeCount = 3,
+    this.selectedGame,
+    this.gameDifficulty,
+    this.requireGame = false,
+  }) : weekDays = weekDays ?? List.filled(7, false);
+
+  // Copia del objeto con posibles modificaciones
+  Alarm copyWith({
+    String? name,
+    DateTime? time,
+    bool? isEnabled,
+    List<bool>? weekDays,
+    bool? isOneTime,
+    int? snoozeTime,
+    int? snoozeCount,
+    int? maxSnoozeCount,
+    String? selectedGame,
+    String? gameDifficulty,
+    bool? requireGame,
+  }) {
+    return Alarm(
+      id: id,
+      name: name ?? this.name,
+      time: time ?? this.time,
+      isEnabled: isEnabled ?? this.isEnabled,
+      weekDays: weekDays ?? List.from(this.weekDays),
+      isOneTime: isOneTime ?? this.isOneTime,
+      snoozeTime: snoozeTime ?? this.snoozeTime,
+      snoozeCount: snoozeCount ?? this.snoozeCount,
+      maxSnoozeCount: maxSnoozeCount ?? this.maxSnoozeCount,
+      selectedGame: selectedGame ?? this.selectedGame,
+      gameDifficulty: gameDifficulty ?? this.gameDifficulty,
+      requireGame: requireGame ?? this.requireGame,
+    );
+  }
+
+  // Convertir a Map para almacenamiento
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'time': time.toIso8601String(),
+      'isEnabled': isEnabled,
+      'weekDays': weekDays,
+      'isOneTime': isOneTime,
+      'snoozeTime': snoozeTime,
+      'snoozeCount': snoozeCount,
+      'maxSnoozeCount': maxSnoozeCount,
+      'selectedGame': selectedGame,
+      'gameDifficulty': gameDifficulty,
+      'requireGame': requireGame,
+    };
+  }
+
+  // Crear objeto desde Map
+  factory Alarm.fromJson(Map<String, dynamic> json) {
+    return Alarm(
+      id: json['id'],
+      name: json['name'],
+      time: DateTime.parse(json['time']),
+      isEnabled: json['isEnabled'],
+      weekDays: List<bool>.from(json['weekDays']),
+      isOneTime: json['isOneTime'],
+      snoozeTime: json['snoozeTime'],
+      snoozeCount: json['snoozeCount'],
+      maxSnoozeCount: json['maxSnoozeCount'],
+      selectedGame: json['selectedGame'],
+      gameDifficulty: json['gameDifficulty'],
+      requireGame: json['requireGame'],
+    );
+  }
+
+  // Convertir a String para almacenamiento
+  String toJsonString() => jsonEncode(toJson());
+
+  // Crear objeto desde String
+  factory Alarm.fromJsonString(String jsonString) {
+    return Alarm.fromJson(jsonDecode(jsonString));
+  }
+
+  // Obtener próxima fecha de alarma
+  DateTime getNextAlarmTime() {
+    if (isOneTime) {
+      return time.isBefore(DateTime.now()) ? time.add(const Duration(days: 1)) : time;
+    }
+
+    DateTime now = DateTime.now();
+    DateTime candidate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      time.hour,
+      time.minute,
+    );
+
+    // Si la hora ya pasó hoy, empezar a buscar desde mañana
+    if (candidate.isBefore(now)) {
+      candidate = candidate.add(const Duration(days: 1));
+    }
+
+    // Buscar el próximo día activo
+    for (int i = 0; i < 7; i++) {
+      int weekday = candidate.weekday - 1; // 0 = Lunes, 6 = Domingo
+      if (weekDays[weekday]) {
+        return candidate;
+      }
+      candidate = candidate.add(const Duration(days: 1));
+    }
+
+    // Si no hay días activos, retornar null o lanzar una excepción
+    throw Exception('No active days set for alarm');
+  }
+
+  // Verificar si la alarma debe sonar en un día específico
+  bool shouldRingOn(DateTime date) {
+    if (isOneTime) {
+      return date.year == time.year &&
+             date.month == time.month &&
+             date.day == time.day;
+    }
+    return weekDays[date.weekday - 1];
+  }
+
+  // Activar/desactivar la alarma
+  void toggleEnabled() {
+    isEnabled = !isEnabled;
+  }
+
+  // Registrar un snooze
+  bool canSnooze() {
+    return snoozeCount < maxSnoozeCount;
+  }
+
+  void incrementSnoozeCount() {
+    if (canSnooze()) {
+      snoozeCount++;
+    }
+  }
+
+  void resetSnoozeCount() {
+    snoozeCount = 0;
+  }
+
+  // Obtener tiempo hasta la próxima alarma en minutos
+  int getTimeToAlarmInMinutes() {
+    final nextAlarm = getNextAlarmTime();
+    return nextAlarm.difference(DateTime.now()).inMinutes;
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/models/game_settings.dart
+Nombre del script: game_settings.dart
+Contenido del script:
+import 'dart:convert';
+import '../utils/constants.dart';
+
+enum GameType { math, memory }
+enum GameDifficulty { easy, medium, hard }
+
+class GameSettings {
+  final GameType gameType;
+  GameDifficulty difficulty;
+  int problemCount;
+  int timeLimit; // en segundos
+  bool isTimeLimited;
+  Map<String, dynamic> specificSettings;
+  
+  // Constructor
+  GameSettings({
+    required this.gameType,
+    this.difficulty = GameDifficulty.easy,
+    this.problemCount = 3,
+    this.timeLimit = 60,
+    this.isTimeLimited = false,
+    Map<String, dynamic>? specificSettings,
+  }) : specificSettings = specificSettings ?? _getDefaultSpecificSettings(gameType);
+
+  // Configuraciones específicas por defecto según el tipo de juego
+  static Map<String, dynamic> _getDefaultSpecificSettings(GameType type) {
+    switch (type) {
+      case GameType.math:
+        return {
+          'operationTypes': ['addition', 'subtraction'], // multiplication, division
+          'maxNumber': 10,
+          'allowNegatives': false,
+          'requireWholeNumbers': true,
+        };
+      case GameType.memory:
+        return {
+          'useTriples': false,
+          'showTimer': true,
+          'cardTheme': 'numbers', // numbers, symbols, colors
+          'matchTime': 1000, // tiempo en ms para mostrar las cartas al hacer match
+        };
+    }
+  }
+
+  // Obtener cantidad de problemas según dificultad
+  int getProblemCount() {
+    switch (gameType) {
+      case GameType.math:
+        switch (difficulty) {
+          case GameDifficulty.easy:
+            return AppConstants.mathGameEasyProblems;
+          case GameDifficulty.medium:
+            return AppConstants.mathGameMediumProblems;
+          case GameDifficulty.hard:
+            return AppConstants.mathGameHardProblems;
+        }
+      case GameType.memory:
+        switch (difficulty) {
+          case GameDifficulty.easy:
+            return AppConstants.memoryGameEasyPairs;
+          case GameDifficulty.medium:
+            return AppConstants.memoryGameMediumPairs;
+          case GameDifficulty.hard:
+            return AppConstants.memoryGameHardPairs;
+        }
+    }
+  }
+
+  // Obtener tiempo límite según dificultad (en segundos)
+  int getTimeLimit() {
+    if (!isTimeLimited) return 0;
+    
+    switch (difficulty) {
+      case GameDifficulty.easy:
+        return 120; // 2 minutos
+      case GameDifficulty.medium:
+        return 90; // 1.5 minutos
+      case GameDifficulty.hard:
+        return 60; // 1 minuto
+    }
+  }
+
+  // Métodos específicos para juego matemático
+  int getMathMaxNumber() {
+    if (gameType != GameType.math) return 0;
+    
+    switch (difficulty) {
+      case GameDifficulty.easy:
+        return 10;
+      case GameDifficulty.medium:
+        return 25;
+      case GameDifficulty.hard:
+        return 100;
+    }
+  }
+
+  List<String> getMathOperations() {
+    if (gameType != GameType.math) return [];
+    
+    switch (difficulty) {
+      case GameDifficulty.easy:
+        return ['addition', 'subtraction'];
+      case GameDifficulty.medium:
+        return ['addition', 'subtraction', 'multiplication'];
+      case GameDifficulty.hard:
+        return ['addition', 'subtraction', 'multiplication', 'division'];
+    }
+  }
+
+  // Métodos específicos para juego de memoria
+  int getMemoryPairCount() {
+    if (gameType != GameType.memory) return 0;
+    
+    return getProblemCount();
+  }
+
+  bool useTriples() {
+    if (gameType != GameType.memory) return false;
+    return difficulty == GameDifficulty.hard && specificSettings['useTriples'] as bool;
+  }
+
+  // Serialización
+  Map<String, dynamic> toJson() {
+    return {
+      'gameType': gameType.toString(),
+      'difficulty': difficulty.toString(),
+      'problemCount': problemCount,
+      'timeLimit': timeLimit,
+      'isTimeLimited': isTimeLimited,
+      'specificSettings': specificSettings,
+    };
+  }
+
+  // Deserialización
+  factory GameSettings.fromJson(Map<String, dynamic> json) {
+    return GameSettings(
+      gameType: GameType.values.firstWhere(
+        (e) => e.toString() == json['gameType'],
+      ),
+      difficulty: GameDifficulty.values.firstWhere(
+        (e) => e.toString() == json['difficulty'],
+      ),
+      problemCount: json['problemCount'],
+      timeLimit: json['timeLimit'],
+      isTimeLimited: json['isTimeLimited'],
+      specificSettings: Map<String, dynamic>.from(json['specificSettings']),
+    );
+  }
+
+  // Convertir a String
+  String toJsonString() => jsonEncode(toJson());
+
+  // Crear desde String
+  factory GameSettings.fromJsonString(String jsonString) {
+    return GameSettings.fromJson(jsonDecode(jsonString));
+  }
+
+  // Copiar con modificaciones
+  GameSettings copyWith({
+    GameDifficulty? difficulty,
+    int? problemCount,
+    int? timeLimit,
+    bool? isTimeLimited,
+    Map<String, dynamic>? specificSettings,
+  }) {
+    return GameSettings(
+      gameType: gameType,
+      difficulty: difficulty ?? this.difficulty,
+      problemCount: problemCount ?? this.problemCount,
+      timeLimit: timeLimit ?? this.timeLimit,
+      isTimeLimited: isTimeLimited ?? this.isTimeLimited,
+      specificSettings: specificSettings ?? Map.from(this.specificSettings),
+    );
+  }
+
+  // Validar configuración
+  bool isValid() {
+    if (problemCount <= 0) return false;
+    if (isTimeLimited && timeLimit <= 0) return false;
+    
+    switch (gameType) {
+      case GameType.math:
+        return specificSettings.containsKey('operationTypes') &&
+               (specificSettings['operationTypes'] as List).isNotEmpty &&
+               specificSettings.containsKey('maxNumber') &&
+               (specificSettings['maxNumber'] as int) > 0;
+      
+      case GameType.memory:
+        return specificSettings.containsKey('cardTheme') &&
+               specificSettings.containsKey('matchTime') &&
+               (specificSettings['matchTime'] as int) > 0;
+    }
+  }
+
+  // Crear configuración predeterminada para un tipo de juego
+  factory GameSettings.createDefault(GameType type) {
+    return GameSettings(
+      gameType: type,
+      difficulty: GameDifficulty.easy,
+      specificSettings: _getDefaultSpecificSettings(type),
+    );
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/screens/games/math_game_screen.dart
+Nombre del script: math_game_screen.dart
+Contenido del script:
+import 'dart:math';
+import 'package:flutter/material.dart';
+import '../../widgets/game_widgets/math_problem_widget.dart';
+
+class MathGameScreen extends StatefulWidget {
+  final String difficulty;
+  final VoidCallback onGameComplete;
+  final VoidCallback onGameFailed;
+
+  const MathGameScreen({
+    super.key,
+    required this.difficulty,
+    required this.onGameComplete,
+    required this.onGameFailed,
+  });
+
+  @override
+  State<MathGameScreen> createState() => _MathGameScreenState();
+}
+
+class _MathGameScreenState extends State<MathGameScreen> {
+  late List<MathProblem> _problems;
+  late int _currentProblemIndex;
+  late int _timeLeft;
+  late bool _isTimerRunning;
+  
+  final _answerController = TextEditingController();
+  final _random = Random();
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeGame();
+  }
+
+  void _initializeGame() {
+    _problems = _generateProblems();
+    _currentProblemIndex = 0;
+    _timeLeft = _getTimeLimit();
+    _isTimerRunning = true;
+    _startTimer();
+  }
+
+  List<MathProblem> _generateProblems() {
+    final int problemCount = _getProblemCount();
+    final int maxNumber = _getMaxNumber();
+    final List<String> operations = _getOperations();
+    final List<MathProblem> problems = [];
+
+    for (int i = 0; i < problemCount; i++) {
+      final operation = operations[_random.nextInt(operations.length)];
+      final problem = _generateProblem(operation, maxNumber);
+      problems.add(problem);
+    }
+
+    return problems;
+  }
+
+  int _getProblemCount() {
+    switch (widget.difficulty) {
+      case 'easy':
+        return 3;
+      case 'medium':
+        return 5;
+      case 'hard':
+        return 7;
+      default:
+        return 3;
+    }
+  }
+
+  int _getTimeLimit() {
+    switch (widget.difficulty) {
+      case 'easy':
+        return 120; // 2 minutos
+      case 'medium':
+        return 180; // 3 minutos
+      case 'hard':
+        return 240; // 4 minutos
+      default:
+        return 120;
+    }
+  }
+
+  int _getMaxNumber() {
+    switch (widget.difficulty) {
+      case 'easy':
+        return 10;
+      case 'medium':
+        return 25;
+      case 'hard':
+        return 100;
+      default:
+        return 10;
+    }
+  }
+
+  List<String> _getOperations() {
+    switch (widget.difficulty) {
+      case 'easy':
+        return ['+', '-'];
+      case 'medium':
+        return ['+', '-', '*'];
+      case 'hard':
+        return ['+', '-', '*', '/'];
+      default:
+        return ['+', '-'];
+    }
+  }
+
+  MathProblem _generateProblem(String operation, int maxNumber) {
+    late int num1, num2, answer;
+    
+    switch (operation) {
+      case '+':
+        num1 = _random.nextInt(maxNumber);
+        num2 = _random.nextInt(maxNumber);
+        answer = num1 + num2;
+        break;
+      case '-':
+        num1 = _random.nextInt(maxNumber);
+        num2 = _random.nextInt(num1 + 1); // Asegurar resultado positivo
+        answer = num1 - num2;
+        break;
+      case '*':
+        num1 = _random.nextInt((sqrt(maxNumber)).toInt());
+        num2 = _random.nextInt((sqrt(maxNumber)).toInt());
+        answer = num1 * num2;
+        break;
+      case '/':
+        num2 = _random.nextInt((sqrt(maxNumber)).toInt()) + 1;
+        answer = _random.nextInt(maxNumber ~/ num2);
+        num1 = answer * num2;
+        break;
+      default:
+        num1 = _random.nextInt(maxNumber);
+        num2 = _random.nextInt(maxNumber);
+        answer = num1 + num2;
+        operation = '+';
+    }
+
+    return MathProblem(
+      num1: num1,
+      num2: num2,
+      operation: operation,
+      answer: answer,
+    );
+  }
+
+  void _startTimer() {
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted) return;
+
+      setState(() {
+        if (_isTimerRunning && _timeLeft > 0) {
+          _timeLeft--;
+          if (_timeLeft > 0) {
+            _startTimer();
+          } else {
+            _handleTimeout();
+          }
+        }
+      });
+    });
+  }
+
+  void _handleTimeout() {
+    _isTimerRunning = false;
+    widget.onGameFailed();
+  }
+
+  void _checkAnswer() {
+    final int? userAnswer = int.tryParse(_answerController.text);
+    if (userAnswer == null) return;
+
+    if (userAnswer == _problems[_currentProblemIndex].answer) {
+      _answerController.clear();
+      
+      if (_currentProblemIndex < _problems.length - 1) {
+        setState(() {
+          _currentProblemIndex++;
+        });
+      } else {
+        _isTimerRunning = false;
+        widget.onGameComplete();
+      }
+    } else {
+      // Mostrar error
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Respuesta incorrecta, intenta de nuevo'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _answerController.dispose();
+    _isTimerRunning = false;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Juego de Matemáticas'),
+        actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                'Tiempo: ${_timeLeft}s',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          LinearProgressIndicator(
+            value: (_currentProblemIndex + 1) / _problems.length,
+            backgroundColor: Colors.grey[200],
+            valueColor: AlwaysStoppedAnimation<Color>(
+              Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Center(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Problema ${_currentProblemIndex + 1} de ${_problems.length}',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 32),
+                      MathProblemWidget(
+                        problem: _problems[_currentProblemIndex],
+                      ),
+                      const SizedBox(height: 32),
+                      TextField(
+                        controller: _answerController,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 24),
+                        decoration: const InputDecoration(
+                          hintText: 'Tu respuesta',
+                          border: OutlineInputBorder(),
+                        ),
+                        onSubmitted: (_) => _checkAnswer(),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _checkAnswer,
+                        child: const Text('Verificar'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class MathProblem {
+  final int num1;
+  final int num2;
+  final String operation;
+  final int answer;
+
+  MathProblem({
+    required this.num1,
+    required this.num2,
+    required this.operation,
+    required this.answer,
+  });
+
+  @override
+  String toString() {
+    return '$num1 $operation $num2 = ?';
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/screens/games/memory_game_screen.dart
+Nombre del script: memory_game_screen.dart
+Contenido del script:
+import 'dart:async';
+import 'dart:math';
+import 'package:flutter/material.dart';
+import '../../widgets/game_widgets/memory_card_widget.dart';
+
+class MemoryGameScreen extends StatefulWidget {
+  final String difficulty;
+  final VoidCallback onGameComplete;
+  final VoidCallback onGameFailed;
+
+  const MemoryGameScreen({
+    super.key,
+    required this.difficulty,
+    required this.onGameComplete,
+    required this.onGameFailed,
+  });
+
+  @override
+  State<MemoryGameScreen> createState() => _MemoryGameScreenState();
+}
+
+class _MemoryGameScreenState extends State<MemoryGameScreen> {
+  late List<MemoryCard> _cards;
+  late int _timeLeft;
+  late bool _isTimerRunning;
+  final List<int> _selectedIndices = [];
+  int _matchedPairs = 0;
+  bool _canFlipCards = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeGame();
+  }
+
+  void _initializeGame() {
+    _cards = _generateCards();
+    _timeLeft = _getTimeLimit();
+    _isTimerRunning = true;
+    _matchedPairs = 0;
+    _startTimer();
+  }
+
+  List<MemoryCard> _generateCards() {
+    final int pairCount = _getPairCount();
+    final List<MemoryCard> cards = [];
+    final List<int> values = List.generate(pairCount, (index) => index);
+    final random = Random();
+
+    // Crear pares de cartas
+    for (int value in values) {
+      for (int i = 0; i < 2; i++) {
+        cards.add(MemoryCard(
+          value: value,
+          isFlipped: false,
+          isMatched: false,
+        ));
+      }
+    }
+
+    // Mezclar las cartas
+    for (int i = cards.length - 1; i > 0; i--) {
+      int randomIndex = random.nextInt(i + 1);
+      MemoryCard temp = cards[i];
+      cards[i] = cards[randomIndex];
+      cards[randomIndex] = temp;
+    }
+
+    return cards;
+  }
+
+  int _getPairCount() {
+    switch (widget.difficulty) {
+      case 'easy':
+        return 6;  // 12 cartas
+      case 'medium':
+        return 12; // 24 cartas
+      case 'hard':
+        return 18; // 36 cartas
+      default:
+        return 6;
+    }
+  }
+
+  int _getTimeLimit() {
+    switch (widget.difficulty) {
+      case 'easy':
+        return 60;  // 1 minuto
+      case 'medium':
+        return 120; // 2 minutos
+      case 'hard':
+        return 180; // 3 minutos
+      default:
+        return 60;
+    }
+  }
+
+  void _startTimer() {
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted) return;
+
+      setState(() {
+        if (_isTimerRunning && _timeLeft > 0) {
+          _timeLeft--;
+          if (_timeLeft > 0) {
+            _startTimer();
+          } else {
+            _handleTimeout();
+          }
+        }
+      });
+    });
+  }
+
+  void _handleTimeout() {
+    _isTimerRunning = false;
+    widget.onGameFailed();
+  }
+
+  void _onCardTap(int index) {
+    if (!_canFlipCards || 
+        _cards[index].isFlipped || 
+        _cards[index].isMatched ||
+        _selectedIndices.contains(index)) {
+      return;
+    }
+
+    setState(() {
+      _cards[index].isFlipped = true;
+      _selectedIndices.add(index);
+    });
+
+    if (_selectedIndices.length == 2) {
+      _canFlipCards = false;
+      _checkMatch();
+    }
+  }
+
+  void _checkMatch() {
+    final card1 = _cards[_selectedIndices[0]];
+    final card2 = _cards[_selectedIndices[1]];
+
+    if (card1.value == card2.value) {
+      // Es un par
+      setState(() {
+        card1.isMatched = true;
+        card2.isMatched = true;
+        _matchedPairs++;
+        _selectedIndices.clear();
+        _canFlipCards = true;
+      });
+
+      if (_matchedPairs == _getPairCount()) {
+        _isTimerRunning = false;
+        widget.onGameComplete();
+      }
+    } else {
+      // No es un par
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        if (!mounted) return;
+        setState(() {
+          card1.isFlipped = false;
+          card2.isFlipped = false;
+          _selectedIndices.clear();
+          _canFlipCards = true;
+        });
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _isTimerRunning = false;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final gridSize = _getGridSize();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Juego de Memoria'),
+        actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                'Tiempo: ${_timeLeft}s',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          LinearProgressIndicator(
+            value: _matchedPairs / _getPairCount(),
+            backgroundColor: Colors.grey[200],
+            valueColor: AlwaysStoppedAnimation<Color>(
+              Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: GridView.builder(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: gridSize,
+                  crossAxisSpacing: 4,
+                  mainAxisSpacing: 4,
+                  childAspectRatio: 1,
+                ),
+                itemCount: _cards.length,
+                itemBuilder: (context, index) {
+                  return MemoryCardWidget(
+                    card: _cards[index],
+                    onTap: () => _onCardTap(index),
+                  );
+                },
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              'Pares encontrados: $_matchedPairs/${_getPairCount()}',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _getGridSize() {
+    switch (widget.difficulty) {
+      case 'easy':
+        return 3;  // 3x4 grid
+      case 'medium':
+        return 4;  // 4x6 grid
+      case 'hard':
+        return 6;  // 6x6 grid
+      default:
+        return 3;
+    }
+  }
+}
+
+class MemoryCard {
+  final int value;
+  bool isFlipped;
+  bool isMatched;
+
+  MemoryCard({
+    required this.value,
+    this.isFlipped = false,
+    this.isMatched = false,
+  });
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/screens/alarm_edit_screen.dart
+Nombre del script: alarm_edit_screen.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/alarm.dart';
+import '../services/alarm_service.dart';
+import '../configuracion/app_settings.dart';
+import '../widgets/custom_numpad.dart';
+import '../widgets/circular_time_picker.dart';
+import 'game_selection_screen.dart';
+
+class AlarmEditScreen extends StatefulWidget {
+  final Alarm? alarm;
+
+  const AlarmEditScreen({
+    super.key,
+    this.alarm,
+  });
+
+  @override
+  State<AlarmEditScreen> createState() => _AlarmEditScreenState();
+}
+
+class _AlarmEditScreenState extends State<AlarmEditScreen> {
+  late TextEditingController _nameController;
+  late TimeOfDay _selectedTime;
+  late List<bool> _selectedDays;
+  late bool _isOneTime;
+  late bool _requireGame;
+  String? _selectedGame;
+  String? _gameDifficulty;
+  late int _snoozeTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeValues();
+  }
+
+  void _initializeValues() {
+    final now = TimeOfDay.now();
+    _nameController = TextEditingController(text: widget.alarm?.name ?? '');
+    _selectedTime = widget.alarm != null
+        ? TimeOfDay(
+            hour: widget.alarm!.time.hour,
+            minute: widget.alarm!.time.minute,
+          )
+        : now;
+    _selectedDays = widget.alarm?.weekDays ?? List.filled(7, false);
+    _isOneTime = widget.alarm?.isOneTime ?? true;
+    _requireGame = widget.alarm?.requireGame ?? false;
+    _selectedGame = widget.alarm?.selectedGame;
+    _gameDifficulty = widget.alarm?.gameDifficulty;
+    _snoozeTime = widget.alarm?.snoozeTime ?? 5;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appSettings = Provider.of<AppSettings>(context);
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.alarm == null ? 'Nueva Alarma' : 'Editar Alarma'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.save),
+            onPressed: _saveAlarm,
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Selector de hora
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: appSettings.inputFormat == InputFormat.numpad
+                  ? TimeInputWithNumpad(
+                      onTimeSelected: (time) {
+                        setState(() => _selectedTime = time);
+                      },
+                    )
+                  : CircularTimePicker(
+                      initialTime: _selectedTime,
+                      onTimeChanged: (time) {
+                        setState(() => _selectedTime = time);
+                      },
+                      use24HourFormat: appSettings.timeFormat == TimeFormat.h24,
+                    ),
+            ),
+
+            // Nombre de la alarma
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre de la alarma',
+                  hintText: 'Ejemplo: Trabajo, Gimnasio...',
+                  prefixIcon: Icon(Icons.label),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Selector de días
+            if (!_isOneTime) ...[
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Repetir en',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              _buildDaySelector(),
+            ],
+
+            // Switch para alarma única
+            SwitchListTile(
+              title: const Text('Alarma de una sola vez'),
+              subtitle: const Text('La alarma sonará solo una vez'),
+              value: _isOneTime,
+              onChanged: (value) {
+                setState(() => _isOneTime = value);
+              },
+            ),
+
+            const Divider(),
+
+            // Configuración del juego
+            SwitchListTile(
+              title: const Text('Requerir juego para apagar'),
+              subtitle: const Text('Deberás completar un juego para apagar la alarma'),
+              value: _requireGame,
+              onChanged: (value) {
+                setState(() => _requireGame = value);
+                if (value && _selectedGame == null) {
+                  _selectGame();
+                }
+              },
+            ),
+
+            if (_requireGame) ...[
+              ListTile(
+                title: Text(_selectedGame == null
+                    ? 'Seleccionar juego'
+                    : 'Juego: ${_getGameName(_selectedGame!)}'),
+                subtitle: _gameDifficulty != null
+                    ? Text('Dificultad: ${_getGameDifficulty(_gameDifficulty!)}')
+                    : null,
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _selectGame,
+              ),
+            ],
+
+            const Divider(),
+
+            // Configuración de snooze
+            ListTile(
+              title: const Text('Tiempo de repetición'),
+              subtitle: Text('$_snoozeTime minutos'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.remove),
+                    onPressed: _snoozeTime > 1
+                        ? () => setState(() => _snoozeTime--)
+                        : null,
+                  ),
+                  Text('$_snoozeTime'),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: _snoozeTime < 30
+                        ? () => setState(() => _snoozeTime++)
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDaySelector() {
+    const days = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+    
+    return Wrap(
+      spacing: 8,
+      alignment: WrapAlignment.center,
+      children: List.generate(7, (index) {
+        return FilterChip(
+          label: Text(days[index]),
+          selected: _selectedDays[index],
+          onSelected: (selected) {
+            setState(() {
+              _selectedDays[index] = selected;
+            });
+          },
+        );
+      }),
+    );
+  }
+
+  Future<void> _selectGame() async {
+    final result = await Navigator.push<Map<String, String>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => GameSelectionScreen(
+          selectedGame: _selectedGame,
+          difficulty: _gameDifficulty,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedGame = result['game'];
+        _gameDifficulty = result['difficulty'];
+      });
+    }
+  }
+
+  String _getGameName(String game) {
+    switch (game) {
+      case 'math':
+        return 'Matemáticas';
+      case 'memory':
+        return 'Memoria';
+      default:
+        return 'Desconocido';
+    }
+  }
+
+  String _getGameDifficulty(String difficulty) {
+    switch (difficulty) {
+      case 'easy':
+        return 'Fácil';
+      case 'medium':
+        return 'Media';
+      case 'hard':
+        return 'Difícil';
+      default:
+        return 'Desconocida';
+    }
+  }
+
+  Future<void> _saveAlarm() async {
+    if (!_isOneTime && !_selectedDays.contains(true)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona al menos un día para la alarma recurrente'),
+        ),
+      );
+      return;
+    }
+
+    if (_requireGame && (_selectedGame == null || _gameDifficulty == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona un juego y su dificultad'),
+        ),
+      );
+      return;
+    }
+
+    final alarmService = Provider.of<AlarmService>(context, listen: false);
+    final now = DateTime.now();
+    final dateTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
+    );
+
+    final newAlarm = Alarm(
+      id: widget.alarm?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      name: _nameController.text,
+      time: dateTime,
+      isEnabled: true,
+      weekDays: _selectedDays,
+      isOneTime: _isOneTime,
+      snoozeTime: _snoozeTime,
+      requireGame: _requireGame,
+      selectedGame: _selectedGame,
+      gameDifficulty: _gameDifficulty,
+    );
+
+    if (widget.alarm != null) {
+      await alarmService.updateAlarm(newAlarm);
+    } else {
+      await alarmService.addAlarm(newAlarm);
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+    }
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/screens/alarm_list_screen.dart
+Nombre del script: alarm_list_screen.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/alarm.dart';
+import '../services/alarm_service.dart';
+import '../widgets/alarm_list_item.dart';
+import 'alarm_edit_screen.dart';
+import '../configuracion/theme_provider.dart';
+import '../configuracion/app_settings.dart';
+
+class AlarmListScreen extends StatelessWidget {
+  const AlarmListScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final alarmService = Provider.of<AlarmService>(context);
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final appSettings = Provider.of<AppSettings>(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Alarmas'),
+        actions: [
+          // Botón para cambiar el tema
+          IconButton(
+            icon: Icon(
+              themeProvider.themeMode == ThemeMode.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            onPressed: () {
+              themeProvider.setThemeMode(
+                themeProvider.themeMode == ThemeMode.dark
+                    ? ThemeMode.light
+                    : ThemeMode.dark,
+              );
+            },
+          ),
+          // Botón de configuración
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _showSettingsDialog(context, appSettings),
+          ),
+        ],
+      ),
+      body: StreamBuilder<List<Alarm>>(
+        stream: alarmService.alarmsStream,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Error: ${snapshot.error}'),
+            );
+          }
+
+          if (!snapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          final alarms = snapshot.data!;
+          
+          if (alarms.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.alarm_off,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No hay alarmas configuradas',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Toca el botón + para crear una alarma',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            itemCount: alarms.length,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemBuilder: (context, index) {
+              final alarm = alarms[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                child: AlarmListItem(
+                  alarm: alarm,
+                  onTap: () => _editAlarm(context, alarm),
+                  onToggle: (enabled) => _toggleAlarm(context, alarm),
+                  onDelete: () => _deleteAlarm(context, alarm),
+                ),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _createAlarm(context),
+        icon: const Icon(Icons.add),
+        label: const Text('Nueva Alarma'),
+      ),
+    );
+  }
+
+  void _editAlarm(BuildContext context, Alarm alarm) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AlarmEditScreen(alarm: alarm),
+      ),
+    );
+  }
+
+  void _toggleAlarm(BuildContext context, Alarm alarm) {
+    final alarmService = Provider.of<AlarmService>(context, listen: false);
+    alarmService.toggleAlarm(alarm.id);
+  }
+
+  Future<void> _deleteAlarm(BuildContext context, Alarm alarm) async {
+    final alarmService = Provider.of<AlarmService>(context, listen: false);
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar Alarma'),
+        content: const Text('¿Estás seguro de que quieres eliminar esta alarma?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await alarmService.deleteAlarm(alarm.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Alarma eliminada'),
+          ),
+        );
+      }
+    }
+  }
+
+  void _createAlarm(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AlarmEditScreen(),
+      ),
+    );
+  }
+
+  VoidCallback _showSettingsDialog(BuildContext context, AppSettings settings) {
+    return () {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Configuración'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Formato de hora
+              ListTile(
+                title: const Text('Formato de hora'),
+                subtitle: Text(
+                  settings.timeFormat == TimeFormat.h24 ? '24 horas' : '12 horas',
+                ),
+                trailing: Switch(
+                  value: settings.timeFormat == TimeFormat.h24,
+                  onChanged: (value) {
+                    settings.setTimeFormat(
+                      value ? TimeFormat.h24 : TimeFormat.h12,
+                    );
+                  },
+                ),
+              ),
+              // Formato de entrada
+              ListTile(
+                title: const Text('Método de entrada'),
+                subtitle: Text(
+                  settings.inputFormat == InputFormat.numpad
+                      ? 'Teclado numérico'
+                      : 'Selector circular',
+                ),
+                trailing: Switch(
+                  value: settings.inputFormat == InputFormat.numpad,
+                  onChanged: (value) {
+                    settings.setInputFormat(
+                      value ? InputFormat.numpad : InputFormat.circular,
+                    );
+                  },
+                ),
+              ),
+              // Volumen de alarma
+              ListTile(
+                title: const Text('Volumen de alarma'),
+                subtitle: Slider(
+                  value: settings.alarmVolume,
+                  onChanged: settings.setAlarmVolume,
+                  divisions: 10,
+                  label: '${(settings.alarmVolume * 100).round()}%',
+                ),
+              ),
+              // Vibración
+              ListTile(
+                title: const Text('Vibración'),
+                trailing: Switch(
+                  value: settings.vibrationEnabled,
+                  onChanged: settings.setVibrationEnabled,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        ),
+      );
+    };
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/screens/alarm_ring_screen.dart
+Nombre del script: alarm_ring_screen.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/alarm.dart';
+import '../services/alarm_service.dart';
+import '../configuracion/app_settings.dart';
+import 'games/math_game_screen.dart';
+import 'games/memory_game_screen.dart';
+
+class AlarmRingScreen extends StatefulWidget {
+  final Alarm alarm;
+
+  const AlarmRingScreen({
+    super.key,
+    required this.alarm,
+  });
+
+  @override
+  State<AlarmRingScreen> createState() => _AlarmRingScreenState();
+}
+
+class _AlarmRingScreenState extends State<AlarmRingScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  bool _isSnoozing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAnimation();
+    _requestWakeLock();
+    _startVibration();
+  }
+
+  void _initializeAnimation() {
+    _controller = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    );
+
+    _animation = Tween<double>(
+      begin: 1.0,
+      end: 1.2,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    ));
+
+    _controller.repeat(reverse: true);
+  }
+
+  Future<void> _requestWakeLock() async {
+    // Implementar wake lock para mantener la pantalla encendida
+    // Usar package: wakelock
+  }
+
+  void _startVibration() {
+    final appSettings = context.read<AppSettings>();
+    if (appSettings.vibrationEnabled) {
+      // Implementar vibración
+      // Usar package: vibration
+    }
+  }
+
+  void _stopVibration() {
+    // Detener vibración
+  }
+
+  Future<void> _handleStopAlarm() async {
+    if (widget.alarm.requireGame && !_isSnoozing) {
+      final gameCompleted = await _showGame();
+      if (!gameCompleted) {
+        return;
+      }
+    }
+
+    if (mounted) {
+      final alarmService = context.read<AlarmService>();
+      await alarmService.stopAlarm(widget.alarm.id);
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  Future<void> _handleSnooze() async {
+    setState(() => _isSnoozing = true);
+    
+    final alarmService = context.read<AlarmService>();
+    await alarmService.snoozeAlarm(widget.alarm.id);
+    
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<bool> _showGame() async {
+    if (!mounted) return false;
+
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) {
+          if (widget.alarm.selectedGame == 'math') {
+            return MathGameScreen(
+              difficulty: widget.alarm.gameDifficulty ?? 'easy',
+              onGameComplete: () => Navigator.pop(context, true),
+              onGameFailed: () => Navigator.pop(context, false),
+            );
+          } else {
+            return MemoryGameScreen(
+              difficulty: widget.alarm.gameDifficulty ?? 'easy',
+              onGameComplete: () => Navigator.pop(context, true),
+              onGameFailed: () => Navigator.pop(context, false),
+            );
+          }
+        },
+      ),
+    );
+
+    return result ?? false;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _stopVibration();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return PopScope(
+      canPop: false, // Prevenir el botón de retroceso
+      child: Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primaryContainer,
+              ],
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Cabecera con la hora
+                Expanded(
+                  flex: 3,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AnimatedBuilder(
+                          animation: _animation,
+                          builder: (context, child) {
+                            return Transform.scale(
+                              scale: _animation.value,
+                              child: Text(
+                                _formatTime(widget.alarm.time),
+                                style: TextStyle(
+                                  fontSize: 72,
+                                  fontWeight: FontWeight.bold,
+                                  color: theme.colorScheme.onPrimary,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          widget.alarm.name.isEmpty ? 'Alarma' : widget.alarm.name,
+                          style: TextStyle(
+                            fontSize: 24,
+                            color: theme.colorScheme.onPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Botones de acción
+                Expanded(
+                  flex: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (widget.alarm.canSnooze() && !_isSnoozing) ...[
+                          ElevatedButton(
+                            onPressed: _handleSnooze,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: theme.colorScheme.surface,
+                              foregroundColor: theme.colorScheme.primary,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 48,
+                                vertical: 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                            ),
+                            child: Text(
+                              'Posponer ${widget.alarm.snoozeTime} minutos',
+                              style: const TextStyle(fontSize: 18),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        ElevatedButton(
+                          onPressed: _handleStopAlarm,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.secondary,
+                            foregroundColor: theme.colorScheme.onSecondary,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 48,
+                              vertical: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                          ),
+                          child: Text(
+                            widget.alarm.requireGame
+                                ? 'Detener con Juego'
+                                : 'Detener',
+                            style: const TextStyle(fontSize: 18),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatTime(DateTime time) {
+    final hours = time.hour.toString().padLeft(2, '0');
+    final minutes = time.minute.toString().padLeft(2, '0');
+    return '$hours:$minutes';
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/screens/game_selection_screen.dart
+Nombre del script: game_selection_screen.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+
+class GameSelectionScreen extends StatefulWidget {
+  final String? selectedGame;
+  final String? difficulty;
+
+  const GameSelectionScreen({
+    super.key,
+    this.selectedGame,
+    this.difficulty,
+  });
+
+  @override
+  State<GameSelectionScreen> createState() => _GameSelectionScreenState();
+}
+
+class _GameSelectionScreenState extends State<GameSelectionScreen> {
+  late String? _selectedGame;
+  late String? _selectedDifficulty;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedGame = widget.selectedGame;
+    _selectedDifficulty = widget.difficulty;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Seleccionar Juego'),
+        actions: [
+          TextButton(
+            onPressed: _canSave()
+                ? () => Navigator.pop(context, {
+                      'game': _selectedGame,
+                      'difficulty': _selectedDifficulty,
+                    })
+                : null,
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'Tipo de Juego',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            _buildGameOptions(),
+            if (_selectedGame != null) ...[
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Dificultad',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              _buildDifficultyOptions(),
+              const SizedBox(height: 16),
+              _buildGamePreview(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGameOptions() {
+    return Column(
+      children: [
+        _buildGameOption(
+          'math',
+          'Matemáticas',
+          'Resuelve operaciones matemáticas',
+          Icons.calculate,
+        ),
+        _buildGameOption(
+          'memory',
+          'Memoria',
+          'Encuentra pares de cartas coincidentes',
+          Icons.grid_view,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGameOption(
+    String gameId,
+    String title,
+    String description,
+    IconData icon,
+  ) {
+    final isSelected = _selectedGame == gameId;
+    final theme = Theme.of(context);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: isSelected ? 4 : 1,
+      color: isSelected ? theme.colorScheme.primaryContainer : null,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedGame = gameId;
+            _selectedDifficulty = null; // Resetear dificultad al cambiar de juego
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 32,
+                color: isSelected
+                    ? theme.colorScheme.onPrimaryContainer
+                    : theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected
+                            ? theme.colorScheme.onPrimaryContainer
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: TextStyle(
+                        color: isSelected
+                            ? theme.colorScheme.onPrimaryContainer
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                Icon(
+                  Icons.check_circle,
+                  color: theme.colorScheme.primary,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDifficultyOptions() {
+    return Column(
+      children: [
+        _buildDifficultyOption(
+          'easy',
+          'Fácil',
+          _getDifficultyDescription('easy'),
+          Colors.green,
+        ),
+        _buildDifficultyOption(
+          'medium',
+          'Media',
+          _getDifficultyDescription('medium'),
+          Colors.orange,
+        ),
+        _buildDifficultyOption(
+          'hard',
+          'Difícil',
+          _getDifficultyDescription('hard'),
+          Colors.red,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDifficultyOption(
+    String difficultyId,
+    String title,
+    String description,
+    Color color,
+  ) {
+    final isSelected = _selectedDifficulty == difficultyId;
+    final theme = Theme.of(context);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: isSelected ? 4 : 1,
+      color: isSelected ? theme.colorScheme.primaryContainer : null,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedDifficulty = difficultyId;
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+                child: isSelected
+                    ? const Icon(
+                        Icons.check,
+                        size: 16,
+                        color: Colors.white,
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected
+                            ? theme.colorScheme.onPrimaryContainer
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: TextStyle(
+                        color: isSelected
+                            ? theme.colorScheme.onPrimaryContainer
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGamePreview() {
+    if (_selectedGame == null || _selectedDifficulty == null) return const SizedBox();
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Vista Previa',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_getGamePreviewTitle()),
+                  const SizedBox(height: 8),
+                  Text(_getGamePreviewDescription()),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getDifficultyDescription(String difficulty) {
+    if (_selectedGame == 'math') {
+      switch (difficulty) {
+        case 'easy':
+          return 'Sumas y restas simples (3 problemas)';
+        case 'medium':
+          return 'Multiplicaciones y divisiones (5 problemas)';
+        case 'hard':
+          return 'Operaciones combinadas (7 problemas)';
+        default:
+          return '';
+      }
+    } else if (_selectedGame == 'memory') {
+      switch (difficulty) {
+        case 'easy':
+          return '6 pares de cartas';
+        case 'medium':
+          return '12 pares de cartas';
+        case 'hard':
+          return '18 pares de cartas';
+        default:
+          return '';
+      }
+    }
+    return '';
+  }
+
+  String _getGamePreviewTitle() {
+    if (_selectedGame == 'math') {
+      return 'Juego de Matemáticas';
+    } else {
+      return 'Juego de Memoria';
+    }
+  }
+
+  String _getGamePreviewDescription() {
+    return _getDifficultyDescription(_selectedDifficulty!);
+  }
+
+  bool _canSave() {
+    return _selectedGame != null && _selectedDifficulty != null;
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/services/alarm_service.dart
+Nombre del script: alarm_service.dart
+Contenido del script:
+import 'dart:async';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/alarm.dart';
+import 'notification_service.dart';
+
+class AlarmService {
+  static final AlarmService _instance = AlarmService._internal();
+  factory AlarmService() => _instance;
+  AlarmService._internal();
+
+  static const String _storageKey = 'alarms';
+  final NotificationService _notificationService = NotificationService();
+  late SharedPreferences _prefs;
+  List<Alarm> _alarms = [];
+
+  final _alarmsController = StreamController<List<Alarm>>.broadcast();
+  Stream<List<Alarm>> get alarmsStream => _alarmsController.stream;
+
+  // Getter para la lista de alarmas
+  List<Alarm> get alarms => List.unmodifiable(_alarms);
+
+  Future<void> initialize() async {
+    _prefs = await SharedPreferences.getInstance();
+    await _loadAlarms();
+  }
+
+  void _notifyListeners() {
+    _alarmsController.add(_alarms);
+  }
+
+  Future<void> _loadAlarms() async {
+    final String? alarmsJson = _prefs.getString(_storageKey);
+    if (alarmsJson != null) {
+      final List<dynamic> alarmsList = jsonDecode(alarmsJson);
+      _alarms = alarmsList.map((json) => Alarm.fromJson(json)).toList();
+
+      // Reprogramar alarmas activas
+      for (final alarm in _alarms) {
+        if (alarm.isEnabled) {
+          await _notificationService.scheduleAlarm(alarm);
+        }
+      }
+    }
+  }
+
+  Future<void> _saveAlarms() async {
+    final String alarmsJson =
+        jsonEncode(_alarms.map((a) => a.toJson()).toList());
+    await _prefs.setString(_storageKey, alarmsJson);
+  }
+
+  Future<void> addAlarm(Alarm alarm) async {
+    _alarms.add(alarm);
+    if (alarm.isEnabled) {
+      await _notificationService.scheduleAlarm(alarm);
+    }
+    await _saveAlarms();
+    _notifyListeners();  
+  }
+
+  Future<void> updateAlarm(Alarm alarm) async {
+    final index = _alarms.indexWhere((a) => a.id == alarm.id);
+    if (index != -1) {
+      await _notificationService.cancelAlarm(alarm.id);
+      _alarms[index] = alarm;
+      if (alarm.isEnabled) {
+        await _notificationService.scheduleAlarm(alarm);
+      }
+      await _saveAlarms();
+      _notifyListeners();  
+    }
+  }
+
+  Future<void> deleteAlarm(String alarmId) async {
+    await _notificationService.cancelAlarm(alarmId);
+    _alarms.removeWhere((a) => a.id == alarmId);
+    await _saveAlarms();
+    _notifyListeners();  
+  }
+
+  Future<void> toggleAlarm(String alarmId) async {
+    final index = _alarms.indexWhere((a) => a.id == alarmId);
+    if (index != -1) {
+      _alarms[index].toggleEnabled();
+      if (_alarms[index].isEnabled) {
+        await _notificationService.scheduleAlarm(_alarms[index]);
+      } else {
+        await _notificationService.cancelAlarm(alarmId);
+      }
+      await _saveAlarms();
+    }
+  }
+
+  Future<void> snoozeAlarm(String alarmId) async {
+    final alarm = _alarms.firstWhere((a) => a.id == alarmId);
+    if (alarm.canSnooze()) {
+      alarm.incrementSnoozeCount();
+      final DateTime newTime =
+          DateTime.now().add(Duration(minutes: alarm.snoozeTime));
+      await _notificationService.cancelAlarm(alarmId);
+      await _notificationService.scheduleAlarm(alarm.copyWith(time: newTime));
+      await _saveAlarms();
+    }
+  }
+
+  Future<void> stopAlarm(String alarmId) async {
+    final alarm = _alarms.firstWhere((a) => a.id == alarmId);
+    await _notificationService.cancelAlarm(alarmId);
+    alarm.resetSnoozeCount();
+    if (!alarm.isOneTime) {
+      await _notificationService.scheduleAlarm(alarm);
+    }
+    await _saveAlarms();
+    _notifyListeners();  
+  }
+
+  List<Alarm> getActiveAlarms() {
+    return _alarms.where((alarm) => alarm.isEnabled).toList();
+  }
+
+  List<Alarm> getAlarmsForDay(DateTime date) {
+    return _alarms
+        .where((alarm) => alarm.isEnabled && alarm.shouldRingOn(date))
+        .toList();
+  }
+}
+
+
+--------------------------------------------------
+
+Ruta al script: lib/services/background_service.dart
+Nombre del script: background_service.dart
+Contenido del script:
+import 'dart:async';
+import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import '../models/alarm.dart';
+import 'notification_service.dart';
+import 'alarm_service.dart';
+
+@pragma('vm:entry-point')
+void backgroundMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+  
+  final service = FlutterBackgroundService();
+  
+  service.invoke('stopService');
+}
+
+class BackgroundService {
+  static final BackgroundService _instance = BackgroundService._internal();
+  factory BackgroundService() => _instance;
+  BackgroundService._internal();
+
+  final FlutterBackgroundService _service = FlutterBackgroundService();
+
+  Future<void> initialize() async {
+    await _service.configure(
+      iosConfiguration: IosConfiguration(), // Requerido por el paquete
+      androidConfiguration: AndroidConfiguration(
+        onStart: onStart,
+        autoStart: true,
+        isForegroundMode: true,
+        notificationChannelId: 'alarm_service',
+        initialNotificationTitle: 'Servicio de Alarma',
+        initialNotificationContent: 'Ejecutándose en segundo plano',
+        foregroundServiceNotificationId: 888,
+        autoStartOnBoot: true,
+      ),
+    );
+
+    await _service.startService();
+  }
+
+  Future<bool> isRunning() async {
+    return await _service.isRunning();
+  }
+
+  Future<void> updateAlarms() async {
+    _service.invoke('updateAlarms');
+  }
+
+  Future<void> stopService() async {
+    _service.invoke('stopService');
+  }
+}
+
+@pragma('vm:entry-point')
+void onStart(ServiceInstance service) async {
+  DartPluginRegistrant.ensureInitialized();
+
+  // Inicializar servicios necesarios
+  final notificationService = NotificationService();
+  final alarmService = AlarmService();
+  await notificationService.initialize();
+  await alarmService.initialize();
+
+  // Verificar alarmas cada minuto
+  Timer.periodic(const Duration(minutes: 1), (timer) async {
+    if (service is AndroidServiceInstance) {
+      if (await service.isForegroundService()) {
+        // Actualizar notificación del servicio
+        service.setForegroundNotificationInfo(
+          title: 'Servicio de Alarma',
+          content: 'Monitoreando alarmas - ${DateTime.now().toString()}',
+        );
+      }
+    }
+
+    _checkAlarms(alarmService, notificationService);
+  });
+
+  // Manejar eventos del servicio
+  service.on('updateAlarms').listen((event) async {
+    await alarmService.initialize();
+  });
+
+  service.on('stopService').listen((event) {
+    service.stopSelf();
+  });
+
+  // Manejar reinicios del dispositivo
+  service.on('onBoot').listen((event) async {
+    await _handleDeviceBoot(alarmService, notificationService);
+  });
+}
+
+Future<void> _checkAlarms(
+  AlarmService alarmService,
+  NotificationService notificationService,
+) async {
+  final now = DateTime.now();
+  final activeAlarms = alarmService.getActiveAlarms();
+
+  for (final alarm in activeAlarms) {
+    if (_shouldTriggerAlarm(alarm, now)) {
+      await _triggerAlarm(alarm, notificationService);
+    }
+  }
+}
+
+bool _shouldTriggerAlarm(Alarm alarm, DateTime now) {
+  if (!alarm.isEnabled) return false;
+
+  final nextAlarmTime = alarm.getNextAlarmTime();
+  return nextAlarmTime.year == now.year &&
+         nextAlarmTime.month == now.month &&
+         nextAlarmTime.day == now.day &&
+         nextAlarmTime.hour == now.hour &&
+         nextAlarmTime.minute == now.minute;
+}
+
+Future<void> _triggerAlarm(
+  Alarm alarm,
+  NotificationService notificationService,
+) async {
+  // Mostrar pantalla completa y notificación
+  await notificationService.showAlarmNotification(alarm);
+}
+
+Future<void> _handleDeviceBoot(
+  AlarmService alarmService,
+  NotificationService notificationService,
+) async {
+  // Reprogramar todas las alarmas activas después del reinicio
+  final activeAlarms = alarmService.getActiveAlarms();
+  for (final alarm in activeAlarms) {
+    await notificationService.scheduleAlarm(alarm);
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/services/notification_service.dart
+Nombre del script: notification_service.dart
+Contenido del script:
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz;
+import '../models/alarm.dart';
+
+class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
+  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+  
+  static const String alarmChannelId = 'alarm_channel';
+  static const String alarmChannelName = 'Alarmas';
+  static const String alarmChannelDescription = 'Notificaciones de alarmas';
+  
+  static const String snoozeActionId = 'SNOOZE';
+  static const String stopActionId = 'STOP';
+  static const String openActionId = 'OPEN';
+
+  Future<void> initialize() async {
+    tz.initializeTimeZones();
+    
+    // Configuración para Android
+    const AndroidInitializationSettings androidSettings = 
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const InitializationSettings settings = InitializationSettings(
+      android: androidSettings,
+    );
+
+    // Inicializar notificaciones
+    await _notifications.initialize(
+      settings,
+      onDidReceiveNotificationResponse: _onNotificationResponse,
+      onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationResponse,
+    );
+
+    // Configurar canales
+    await _setupNotificationChannels();
+
+    // Solicitar permisos
+    await _requestPermissions();
+  }
+
+  Future<void> _setupNotificationChannels() async {
+    // Canal principal para alarmas
+    const AndroidNotificationChannel alarmChannel = AndroidNotificationChannel(
+      alarmChannelId,
+      alarmChannelName,
+      description: alarmChannelDescription,
+      importance: Importance.max,
+      enableVibration: true,
+      enableLights: true,
+      playSound: true,
+      sound: RawResourceAndroidNotificationSound('alarm_sound'),
+      showBadge: true,
+    );
+
+    await _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(alarmChannel);
+  }
+
+  Future<void> _requestPermissions() async {
+    final platform = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+            
+    if (platform != null) {
+      await platform.requestNotificationsPermission();
+    }
+  }
+  
+
+  Future<void> showAlarmNotification(Alarm alarm) async {
+    const androidPlatformChannelSpecifics = AndroidNotificationDetails(
+      alarmChannelId,
+      alarmChannelName,
+      channelDescription: alarmChannelDescription,
+      importance: Importance.max,
+      priority: Priority.max,
+      fullScreenIntent: true,
+      category: AndroidNotificationCategory.alarm,
+      actions: [
+        AndroidNotificationAction(
+          snoozeActionId,
+          'Posponer',
+          showsUserInterface: true,
+          cancelNotification: false,
+        ),
+        AndroidNotificationAction(
+          stopActionId,
+          'Detener',
+          showsUserInterface: true,
+          cancelNotification: true,
+        ),
+      ],
+      sound: RawResourceAndroidNotificationSound('alarm_sound'),
+      ongoing: true,
+      autoCancel: false,
+    );
+
+    await _notifications.show(
+      alarm.id.hashCode,
+      'Alarma - ${alarm.name}',
+      'Es hora de despertar',
+      const NotificationDetails(android: androidPlatformChannelSpecifics),
+      payload: alarm.toJsonString(),
+    );
+  }
+
+  Future<void> scheduleAlarm(Alarm alarm) async {
+    final nextAlarmTime = alarm.getNextAlarmTime();
+    
+    const androidDetails = AndroidNotificationDetails(
+      alarmChannelId,
+      alarmChannelName,
+      channelDescription: alarmChannelDescription,
+      importance: Importance.max,
+      priority: Priority.max,
+      fullScreenIntent: true,
+      category: AndroidNotificationCategory.alarm,
+      actions: [
+        AndroidNotificationAction(
+          snoozeActionId,
+          'Posponer',
+          showsUserInterface: true,
+          cancelNotification: false,
+        ),
+        AndroidNotificationAction(
+          stopActionId,
+          'Detener',
+          showsUserInterface: true,
+          cancelNotification: true,
+        ),
+      ],
+    );
+
+    await _notifications.zonedSchedule(
+      alarm.id.hashCode,
+      'Alarma programada - ${alarm.name}',
+      'Sonará a las ${_formatTime(nextAlarmTime)}',
+      tz.TZDateTime.from(nextAlarmTime, tz.local),
+      const NotificationDetails(android: androidDetails),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: alarm.isOneTime
+          ? DateTimeComponents.time
+          : DateTimeComponents.dayOfWeekAndTime,
+      payload: alarm.toJsonString(),
+    );
+  }
+
+  Future<void> cancelAlarm(String alarmId) async {
+    await _notifications.cancel(alarmId.hashCode);
+  }
+
+  Future<void> cancelAllAlarms() async {
+    await _notifications.cancelAll();
+  }
+
+  static Future<void> _onNotificationResponse(
+    NotificationResponse response,
+  ) async {
+    final String? payload = response.payload;
+    if (payload == null) return;
+
+    final alarm = Alarm.fromJsonString(payload);
+    
+    switch (response.actionId) {
+      case snoozeActionId:
+        await _handleSnooze(alarm);
+        break;
+      case stopActionId:
+        await _handleStop(alarm);
+        break;
+      case openActionId:
+      default:
+        await _handleOpen(alarm);
+        break;
+    }
+  }
+
+  @pragma('vm:entry-point')
+  static Future<void> _onBackgroundNotificationResponse(
+    NotificationResponse response,
+  ) async {
+    await _onNotificationResponse(response);
+  }
+
+  static Future<void> _handleSnooze(Alarm alarm) async {
+    // Implementar lógica de snooze
+  }
+
+  static Future<void> _handleStop(Alarm alarm) async {
+    // Implementar lógica de stop
+  }
+
+  static Future<void> _handleOpen(Alarm alarm) async {
+    // Implementar lógica para abrir la app
+  }
+
+  String _formatTime(DateTime time) {
+    final hours = time.hour.toString().padLeft(2, '0');
+    final minutes = time.minute.toString().padLeft(2, '0');
+    return '$hours:$minutes';
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/utils/constants.dart
+Nombre del script: constants.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+
+class AppConstants {
+  // Temas
+  static const Color primaryLightColor = Color(0xFF2196F3);
+  static const Color primaryDarkColor = Color(0xFF1976D2);
+  static const Color accentLightColor = Color(0xFF03A9F4);
+  static const Color accentDarkColor = Color(0xFF0288D1);
+  
+  // Configuraciones de juego
+  static const int mathGameEasyProblems = 3;
+  static const int mathGameMediumProblems = 5;
+  static const int mathGameHardProblems = 7;
+  
+  static const int memoryGameEasyPairs = 6;
+  static const int memoryGameMediumPairs = 12;
+  static const int memoryGameHardPairs = 18;
+  
+  // Configuraciones de alarma
+  static const int defaultSnoozeTime = 5; // minutos
+  static const int maxSnoozeCount = 3;
+  
+  // Keys para SharedPreferences
+  static const String keyThemeMode = 'theme_mode';
+  static const String keyTimeFormat = 'time_format';
+  static const String keyUseNumpad = 'use_numpad';
+  static const String keyAlarmVolume = 'alarm_volume';
+  static const String keyVibrationEnabled = 'vibration_enabled';
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/widgets/game_widgets/math_problem_widget.dart
+Nombre del script: math_problem_widget.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import '../../screens/games/math_game_screen.dart';
+
+class MathProblemWidget extends StatelessWidget {
+  final MathProblem problem;
+  final double fontSize;
+
+  const MathProblemWidget({
+    super.key,
+    required this.problem,
+    this.fontSize = 48,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            problem.num1.toString(),
+            style: TextStyle(fontSize: fontSize),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              _getOperationSymbol(problem.operation),
+              style: TextStyle(fontSize: fontSize),
+            ),
+          ),
+          Text(
+            problem.num2.toString(),
+            style: TextStyle(fontSize: fontSize),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              '=',
+              style: TextStyle(fontSize: fontSize),
+            ),
+          ),
+          Text(
+            '?',
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getOperationSymbol(String operation) {
+    switch (operation) {
+      case '+':
+        return '+';
+      case '-':
+        return '−';
+      case '*':
+        return '×';
+      case '/':
+        return '÷';
+      default:
+        return operation;
+    }
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/widgets/game_widgets/memory_card_widget.dart
+Nombre del script: memory_card_widget.dart
+Contenido del script:
+import 'dart:math';
+
+import 'package:flutter/material.dart';
+import '../../screens/games/memory_game_screen.dart';
+
+class MemoryCardWidget extends StatefulWidget {
+  final MemoryCard card;
+  final VoidCallback onTap;
+
+  const MemoryCardWidget({
+    super.key,
+    required this.card,
+    required this.onTap,
+  });
+
+  @override
+  State<MemoryCardWidget> createState() => _MemoryCardWidgetState();
+}
+
+class _MemoryCardWidgetState extends State<MemoryCardWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  bool _isFrontVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
+    _animation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: -pi / 2),
+        weight: 50.0,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: pi / 2, end: 0.0),
+        weight: 50.0,
+      ),
+    ]).animate(_controller);
+
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _isFrontVisible = !_isFrontVisible;
+        _controller.reset();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(MemoryCardWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.card.isFlipped != widget.card.isFlipped) {
+      if (widget.card.isFlipped) {
+        _showFront();
+      } else {
+        _showBack();
+      }
+    }
+  }
+
+  void _showFront() {
+    setState(() {
+      _isFrontVisible = true;
+      _controller.forward();
+    });
+  }
+
+  void _showBack() {
+    setState(() {
+      _isFrontVisible = false;
+      _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, child) {
+          final transform = Matrix4.identity()
+            ..setEntry(3, 2, 0.001)
+            ..rotateY(_animation.value);
+          return Transform(
+            transform: transform,
+            alignment: Alignment.center,
+            child: _isFrontVisible ? _buildFrontSide() : _buildBackSide(),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFrontSide() {
+    return Container(
+      decoration: BoxDecoration(
+        color: widget.card.isMatched
+            ? Colors.green.withOpacity(0.3)
+            : Theme.of(context).colorScheme.primary,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          _getCardContent(widget.card.value),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onPrimary,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBackSide() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary,
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Icon(
+          Icons.question_mark,
+          size: 32,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      ),
+    );
+  }
+
+  String _getCardContent(int value) {
+    // Puedes personalizar el contenido de las cartas aquí
+    // Por ejemplo, usando emojis, números, letras, etc.
+    const List<String> symbols = [
+      '🌟', '🎮', '🎵', '🎨', '🚀', '🌈',
+      '🦁', '🐘', '🦒', '🦊', '🐼', '🦄',
+      '🍎', '🍕', '🍦', '🍪', '🌺', '🎸',
+    ];
+    return symbols[value % symbols.length];
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/widgets/alarm_list_item.dart
+Nombre del script: alarm_list_item.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import '../models/alarm.dart';
+
+class AlarmListItem extends StatelessWidget {
+  final Alarm alarm;
+  final VoidCallback onTap;
+  final Function(bool) onToggle;
+  final VoidCallback onDelete;
+
+  const AlarmListItem({
+    super.key,
+    required this.alarm,
+    required this.onTap,
+    required this.onToggle,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dismissible(
+      key: Key(alarm.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        color: Colors.red,
+        child: const Icon(
+          Icons.delete,
+          color: Colors.white,
+        ),
+      ),
+      onDismissed: (_) => onDelete(),
+      child: ListTile(
+        onTap: onTap,
+        leading: _buildTimeDisplay(context),
+        title: Text(
+          alarm.name.isEmpty ? 'Alarma' : alarm.name,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        subtitle: _buildSubtitle(context),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (alarm.requireGame)
+              Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: Icon(
+                  _getGameIcon(),
+                  size: 20,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            Switch(
+              value: alarm.isEnabled,
+              onChanged: onToggle,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeDisplay(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _formatTime(alarm.time),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubtitle(BuildContext context) {
+    final TextStyle subtitleStyle = Theme.of(context).textTheme.bodySmall!;
+    
+    if (alarm.isOneTime) {
+      return Text(
+        'Una vez',
+        style: subtitleStyle,
+      );
+    }
+
+    final List<String> days = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+    final List<Widget> dayWidgets = [];
+
+    for (int i = 0; i < 7; i++) {
+      dayWidgets.add(
+        Text(
+          days[i],
+          style: subtitleStyle.copyWith(
+            color: alarm.weekDays[i]
+                ? Theme.of(context).colorScheme.primary
+                : subtitleStyle.color,
+            fontWeight: alarm.weekDays[i] ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      );
+
+      if (i < 6) {
+        dayWidgets.add(const Text(' · '));
+      }
+    }
+
+    return Row(
+      children: dayWidgets,
+    );
+  }
+
+  String _formatTime(DateTime time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  IconData _getGameIcon() {
+    if (alarm.selectedGame == 'math') {
+      return Icons.calculate;
+    } else if (alarm.selectedGame == 'memory') {
+      return Icons.grid_view;
+    }
+    return Icons.games;
+  }
+}
+
+// Widget de ejemplo para el badge de dificultad
+class DifficultyBadge extends StatelessWidget {
+  final String difficulty;
+  final Color? backgroundColor;
+  final Color? textColor;
+
+  const DifficultyBadge({
+    super.key,
+    required this.difficulty,
+    this.backgroundColor,
+    this.textColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final effectiveBackgroundColor = backgroundColor ?? theme.colorScheme.secondary;
+    final effectiveTextColor = textColor ?? theme.colorScheme.onSecondary;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: effectiveBackgroundColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        difficulty,
+        style: TextStyle(
+          color: effectiveTextColor,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}
+
+
+--------------------------------------------------
+
+Ruta al script: lib/widgets/circular_time_picker.dart
+Nombre del script: circular_time_picker.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
+class CircularTimePicker extends StatefulWidget {
+  final TimeOfDay initialTime;
+  final void Function(TimeOfDay) onTimeChanged;
+  final Color? accentColor;
+  final Color? backgroundColor;
+  final bool use24HourFormat;
+
+  const CircularTimePicker({
+    super.key,
+    required this.initialTime,
+    required this.onTimeChanged,
+    this.accentColor,
+    this.backgroundColor,
+    this.use24HourFormat = true,
+  });
+
+  @override
+  State<CircularTimePicker> createState() => _CircularTimePickerState();
+}
+
+class _CircularTimePickerState extends State<CircularTimePicker> {
+  late TimeOfDay _selectedTime;
+  bool _isHourMode = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTime = widget.initialTime;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final effectiveAccentColor = widget.accentColor ?? theme.colorScheme.primary;
+    final effectiveBackgroundColor = widget.backgroundColor ?? theme.colorScheme.surface;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Display de la hora seleccionada
+        Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _TimeDisplay(
+                value: _formatHour(_selectedTime.hour),
+                isSelected: _isHourMode,
+                onTap: () => setState(() => _isHourMode = true),
+                color: effectiveAccentColor,
+              ),
+              Text(
+                ':',
+                style: TextStyle(
+                  fontSize: 48,
+                  color: effectiveAccentColor,
+                ),
+              ),
+              _TimeDisplay(
+                value: _selectedTime.minute.toString().padLeft(2, '0'),
+                isSelected: !_isHourMode,
+                onTap: () => setState(() => _isHourMode = false),
+                color: effectiveAccentColor,
+              ),
+              if (!widget.use24HourFormat) ...[
+                const SizedBox(width: 12),
+                _AmPmSwitch(
+                  isAm: _selectedTime.hour < 12,
+                  onChanged: _handleAmPmChanged,
+                  color: effectiveAccentColor,
+                ),
+              ],
+            ],
+          ),
+        ),
+        // Selector circular
+        SizedBox(
+          height: 300,
+          width: 300,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: effectiveBackgroundColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+              ),
+              _CircularPicker(
+                selectedValue: _isHourMode ? _selectedTime.hour : _selectedTime.minute,
+                maxValue: _isHourMode ? (widget.use24HourFormat ? 23 : 11) : 59,
+                onValueChanged: (value) {
+                  setState(() {
+                    if (_isHourMode) {
+                      if (!widget.use24HourFormat && _selectedTime.hour >= 12) {
+                        value += 12;
+                      }
+                      _selectedTime = TimeOfDay(hour: value, minute: _selectedTime.minute);
+                    } else {
+                      _selectedTime = TimeOfDay(hour: _selectedTime.hour, minute: value);
+                    }
+                    widget.onTimeChanged(_selectedTime);
+                  });
+                },
+                accentColor: effectiveAccentColor,
+                isHourMode: _isHourMode,
+                use24HourFormat: widget.use24HourFormat,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatHour(int hour) {
+    if (widget.use24HourFormat) {
+      return hour.toString().padLeft(2, '0');
+    }
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    return displayHour.toString();
+  }
+
+  void _handleAmPmChanged(bool isAm) {
+    setState(() {
+      final currentHour = _selectedTime.hour;
+      final newHour = isAm
+          ? (currentHour >= 12 ? currentHour - 12 : currentHour)
+          : (currentHour < 12 ? currentHour + 12 : currentHour);
+      
+      _selectedTime = TimeOfDay(hour: newHour, minute: _selectedTime.minute);
+      widget.onTimeChanged(_selectedTime);
+    });
+  }
+}
+
+class _TimeDisplay extends StatelessWidget {
+  final String value;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final Color color;
+
+  const _TimeDisplay({
+    required this.value,
+    required this.isSelected,
+    required this.onTap,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: isSelected ? color.withOpacity(0.1) : Colors.transparent,
+        ),
+        child: Text(
+          value,
+          style: TextStyle(
+            fontSize: 48,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AmPmSwitch extends StatelessWidget {
+  final bool isAm;
+  final ValueChanged<bool> onChanged;
+  final Color color;
+
+  const _AmPmSwitch({
+    required this.isAm,
+    required this.onChanged,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _AmPmButton(
+          text: 'AM',
+          isSelected: isAm,
+          onTap: () => onChanged(true),
+          color: color,
+        ),
+        const SizedBox(height: 4),
+        _AmPmButton(
+          text: 'PM',
+          isSelected: !isAm,
+          onTap: () => onChanged(false),
+          color: color,
+        ),
+      ],
+    );
+  }
+}
+
+class _AmPmButton extends StatelessWidget {
+  final String text;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final Color color;
+
+  const _AmPmButton({
+    required this.text,
+    required this.isSelected,
+    required this.onTap,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          color: isSelected ? color : Colors.transparent,
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.white : color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CircularPicker extends StatefulWidget {
+  final int selectedValue;
+  final int maxValue;
+  final ValueChanged<int> onValueChanged;
+  final Color accentColor;
+  final bool isHourMode;
+  final bool use24HourFormat;
+
+  const _CircularPicker({
+    required this.selectedValue,
+    required this.maxValue,
+    required this.onValueChanged,
+    required this.accentColor,
+    required this.isHourMode,
+    required this.use24HourFormat,
+  });
+
+  @override
+  State<_CircularPicker> createState() => _CircularPickerState();
+}
+
+class _CircularPickerState extends State<_CircularPicker> {
+  // ignore: unused_field
+  late double _startAngle;
+  late double _currentAngle;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateAngle();
+  }
+
+  @override
+  void didUpdateWidget(_CircularPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedValue != widget.selectedValue) {
+      _updateAngle();
+    }
+  }
+
+  void _updateAngle() {
+    _currentAngle = _startAngle = (widget.selectedValue * 360 / (widget.maxValue + 1)) * (math.pi / 180);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onPanStart: _onPanStart,
+      onPanUpdate: _onPanUpdate,
+      child: CustomPaint(
+        size: const Size(300, 300),
+        painter: _CircularPickerPainter(
+          selectedValue: widget.selectedValue,
+          maxValue: widget.maxValue,
+          accentColor: widget.accentColor,
+          isHourMode: widget.isHourMode,
+          use24HourFormat: widget.use24HourFormat,
+        ),
+      ),
+    );
+  }
+
+  void _onPanStart(DragStartDetails details) {
+    final box = context.findRenderObject() as RenderBox;
+    final center = box.size.center(Offset.zero);
+    final position = details.localPosition;
+    _startAngle = (math.atan2(position.dy - center.dy, position.dx - center.dx) + math.pi * 2) % (math.pi * 2);
+  }
+
+  void _onPanUpdate(DragUpdateDetails details) {
+    final box = context.findRenderObject() as RenderBox;
+    final center = box.size.center(Offset.zero);
+    final position = details.localPosition;
+    _currentAngle = (math.atan2(position.dy - center.dy, position.dx - center.dx) + math.pi * 2) % (math.pi * 2);
+
+    final anglePercent = _currentAngle / (math.pi * 2);
+    final newValue = (anglePercent * (widget.maxValue + 1)).round() % (widget.maxValue + 1);
+
+    if (newValue != widget.selectedValue) {
+      widget.onValueChanged(newValue);
+    }
+  }
+}
+
+class _CircularPickerPainter extends CustomPainter {
+  final int selectedValue;
+  final int maxValue;
+  final Color accentColor;
+  final bool isHourMode;
+  final bool use24HourFormat;
+
+  _CircularPickerPainter({
+    required this.selectedValue,
+    required this.maxValue,
+    required this.accentColor,
+    required this.isHourMode,
+    required this.use24HourFormat,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    
+    // Dibujar números
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+    );
+
+    for (int i = 0; i <= maxValue; i++) {
+      final angle = (i * 360 / (maxValue + 1)) * (math.pi / 180);
+      final offset = Offset(
+        center.dx + (radius - 30) * math.cos(angle),
+        center.dy + (radius - 30) * math.sin(angle),
+      );
+
+      String text;
+      if (isHourMode) {
+        if (use24HourFormat) {
+          text = i.toString();
+        } else {
+          text = (i == 0 ? 12 : i).toString();
+        }
+      } else {
+        text = i.toString().padLeft(2, '0');
+      }
+
+      textPainter.text = TextSpan(
+        text: text,
+        style: TextStyle(
+          color: i == selectedValue ? accentColor : Colors.grey,
+          fontSize: 16,
+          fontWeight: i == selectedValue ? FontWeight.bold : FontWeight.normal,
+        ),
+      );
+
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        offset.translate(-textPainter.width / 2, -textPainter.height / 2),
+      );
+    }
+
+    // Dibujar indicador
+    final paint = Paint()
+      ..color = accentColor
+      ..style = PaintingStyle.fill;
+
+    final angle = (selectedValue * 360 / (maxValue + 1)) * (math.pi / 180);
+    final markerOffset = Offset(
+      center.dx + (radius - 30) * math.cos(angle),
+      center.dy + (radius - 30) * math.sin(angle),
+    );
+
+    canvas.drawCircle(markerOffset, 16, paint);
+
+    // Dibujar línea al centro
+    paint.strokeWidth = 2;
+    paint.style = PaintingStyle.stroke;
+    canvas.drawLine(center, markerOffset, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CircularPickerPainter oldDelegate) {
+    return oldDelegate.selectedValue != selectedValue ||
+           oldDelegate.accentColor != accentColor;
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/widgets/custom_numpad.dart
+Nombre del script: custom_numpad.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+
+class CustomNumpad extends StatelessWidget {
+  final Function(String) onNumberTap;
+  final VoidCallback onDeleteTap;
+  final VoidCallback onDoneTap;
+  final bool showDoneButton;
+  final String? doneButtonText;
+  final Color? numberColor;
+  final Color? iconColor;
+  final Color? doneButtonColor;
+
+  const CustomNumpad({
+    super.key,
+    required this.onNumberTap,
+    required this.onDeleteTap,
+    required this.onDoneTap,
+    this.showDoneButton = true,
+    this.doneButtonText,
+    this.numberColor,
+    this.iconColor,
+    this.doneButtonColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final effectiveNumberColor = numberColor ?? theme.colorScheme.primary;
+    final effectiveIconColor = iconColor ?? theme.colorScheme.primary;
+    final effectiveDoneButtonColor = doneButtonColor ?? theme.colorScheme.primary;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildNumberButton('1', effectiveNumberColor),
+              _buildNumberButton('2', effectiveNumberColor),
+              _buildNumberButton('3', effectiveNumberColor),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildNumberButton('4', effectiveNumberColor),
+              _buildNumberButton('5', effectiveNumberColor),
+              _buildNumberButton('6', effectiveNumberColor),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildNumberButton('7', effectiveNumberColor),
+              _buildNumberButton('8', effectiveNumberColor),
+              _buildNumberButton('9', effectiveNumberColor),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildSpecialButton(
+                icon: Icons.backspace,
+                onTap: onDeleteTap,
+                color: effectiveIconColor,
+              ),
+              _buildNumberButton('0', effectiveNumberColor),
+              if (showDoneButton)
+                _buildSpecialButton(
+                  icon: Icons.check,
+                  onTap: onDoneTap,
+                  color: effectiveDoneButtonColor,
+                  text: doneButtonText,
+                )
+              else
+                const SizedBox(width: 70),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNumberButton(String number, Color color) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onNumberTap(number),
+        borderRadius: BorderRadius.circular(40),
+        child: Container(
+          width: 70,
+          height: 70,
+          alignment: Alignment.center,
+          child: Text(
+            number,
+            style: TextStyle(
+              fontSize: 32,
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpecialButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required Color color,
+    String? text,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(40),
+        child: Container(
+          width: 70,
+          height: 70,
+          alignment: Alignment.center,
+          child: text != null
+              ? Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                  ),
+                )
+              : Icon(
+                  icon,
+                  color: color,
+                  size: 28,
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+// Widget de ejemplo para mostrar cómo se usa el CustomNumpad
+class TimeInputWithNumpad extends StatefulWidget {
+  final void Function(TimeOfDay) onTimeSelected;
+
+  const TimeInputWithNumpad({
+    super.key,
+    required this.onTimeSelected,
+  });
+
+  @override
+  State<TimeInputWithNumpad> createState() => _TimeInputWithNumpadState();
+}
+
+class _TimeInputWithNumpadState extends State<TimeInputWithNumpad> {
+  String _input = '';
+
+  void _handleNumberInput(String number) {
+    if (_input.length < 4) {
+      setState(() {
+        _input += number;
+      });
+    }
+  }
+
+  void _handleDelete() {
+    if (_input.isNotEmpty) {
+      setState(() {
+        _input = _input.substring(0, _input.length - 1);
+      });
+    }
+  }
+
+  void _handleDone() {
+    if (_input.length == 4) {
+      final hours = int.parse(_input.substring(0, 2));
+      final minutes = int.parse(_input.substring(2, 4));
+      
+      if (hours < 24 && minutes < 60) {
+        widget.onTimeSelected(TimeOfDay(hour: hours, minute: minutes));
+      } else {
+        // Mostrar error
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Hora inválida. Use formato 24h (0000-2359)'),
+          ),
+        );
+      }
+    }
+  }
+
+  String get formattedTime {
+    if (_input.isEmpty) return '--:--';
+    
+    final paddedInput = _input.padRight(4, '-');
+    return '${paddedInput.substring(0, 2)}:${paddedInput.substring(2)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Text(
+            formattedTime,
+            style: Theme.of(context).textTheme.displayMedium,
+          ),
+        ),
+        CustomNumpad(
+          onNumberTap: _handleNumberInput,
+          onDeleteTap: _handleDelete,
+          onDoneTap: _handleDone,
+        ),
+      ],
+    );
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/main.dart
+Nombre del script: main.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
+import 'package:the_good_alarm/configuracion/app_settings.dart';
+import 'package:the_good_alarm/configuracion/theme_provider.dart';
+import 'package:the_good_alarm/services/alarm_service.dart';
+
+// Importaremos estos archivos cuando los creemos
+// import 'config/theme_provider.dart';
+// import 'services/notification_service.dart';
+// import 'services/background_service.dart';
+// import 'screens/home_screen.dart';
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar notificaciones
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  const DarwinInitializationSettings initializationSettingsIOS =
+      DarwinInitializationSettings(
+    requestSoundPermission: false,
+    requestBadgePermission: false,
+    requestAlertPermission: false,
+  );
+
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+    iOS: initializationSettingsIOS,
+  );
+
+  try {
+    await flutterLocalNotificationsPlugin.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse details) async {
+        // Manejar la respuesta de la notificación
+      },
+    );
+  } catch (e) {
+    print('Error initializing notifications: $e');
+  }
+
+  // Solicitar permisos
+  await requestPermissions();
+
+  // Iniciar servicio en segundo plano
+  await initializeService();
+
+  runApp(const MyApp());
+}
+
+Future<void> requestPermissions() async {
+  await Permission.notification.request();
+  await Permission.systemAlertWindow.request();
+}
+
+Future<void> initializeService() async {
+  final service = FlutterBackgroundService();
+
+  await service.configure(
+    androidConfiguration: AndroidConfiguration(
+      onStart: onStart,
+      autoStart: true,
+      isForegroundMode: true,
+      notificationChannelId: 'alarm_service',
+      initialNotificationTitle: 'Servicio de Alarma',
+      initialNotificationContent: 'Iniciando...',
+      foregroundServiceNotificationId: 888,
+    ),
+    iosConfiguration:
+        IosConfiguration(), // Requerido por el paquete aunque no lo usemos
+  );
+}
+
+@pragma('vm:entry-point')
+void onStart(ServiceInstance service) async {
+  // Lógica del servicio en segundo plano
+  // Aquí implementaremos la lógica para manejar las alarmas
+}
+
+@pragma('vm:entry-point')
+Future<bool> onIosBackground(ServiceInstance service) async {
+  return true;
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => AppSettings()),
+        Provider<AlarmService>(create: (_) => AlarmService()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'Alarm Game App',
+            themeMode: themeProvider.themeMode,
+            theme: themeProvider.getLightTheme(),
+            darkTheme: themeProvider.getDarkTheme(),
+            home: const Placeholder(), // Aquí irá HomeScreen
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+--------------------------------------------------
+
+Ruta al script: android/app/build.gradle
+Nombre del script: build.gradle
+Contenido del script:
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "com.ando.devs.the_good_alarm"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.ando.devs.the_good_alarm"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+
+--------------------------------------------------
+
+Ruta al script: android/app/src/main/AndroidManifest.xml
+Nombre del script: AndroidManifest.xml
+Contenido del script:
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <application android:label="the_good_alarm" android:name="${applicationName}" android:icon="@mipmap/ic_launcher">
+        <service android:name="com.dexterous.flutterlocalnotifications.ForegroundService" android:exported="false" android:stopWithTask="false"/>
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:taskAffinity="" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data android:name="flutterEmbedding" android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+
+
+--------------------------------------------------
+
+Ruta al script: android/app/src/main/kotlin/com/example/the_good_alarm/MainActivity.kt
+Nombre del script: MainActivity.kt
+Contenido del script:
+package com.ando.devs.the_good_alarm
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity: FlutterActivity()
+
+
+--------------------------------------------------
+
+Ruta al script: android/build.gradle
+Nombre del script: build.gradle
+Contenido del script:
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = "../build"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
+
+
+--------------------------------------------------
+
+Ruta al script: android/gradle.properties
+Nombre del script: gradle.properties
+Contenido del script:
+org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G -XX:+HeapDumpOnOutOfMemoryError
+android.useAndroidX=true
+android.enableJetifier=true
+
+
+--------------------------------------------------
+
+Ruta al script: android/settings.gradle
+Nombre del script: settings.gradle
+Contenido del script:
+pluginManagement {
+    def flutterSdkPath = {
+        def properties = new Properties()
+        file("local.properties").withInputStream { properties.load(it) }
+        def flutterSdkPath = properties.getProperty("flutter.sdk")
+        assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
+        return flutterSdkPath
+    }()
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+    id "com.android.application" version "8.1.0" apply false
+    id "org.jetbrains.kotlin.android" version "1.8.22" apply false
+}
+
+include ":app"
+
+
+--------------------------------------------------
+
+Ruta al script: pubspec.yaml
+Nombre del script: pubspec.yaml
+Contenido del script:
+name: the_good_alarm
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.5.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_background_service: ^5.1.0
+  flutter_local_notifications: ^18.0.1
+  permission_handler: ^11.3.1
+  provider: ^6.1.2
+  shared_preferences: ^2.3.4
+  timezone: ^0.10.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+
+--------------------------------------------------
+
