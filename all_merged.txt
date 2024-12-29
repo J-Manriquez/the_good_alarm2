@@ -3911,6 +3911,8 @@ class _TimeInputWithNumpadState extends State<TimeInputWithNumpad> {
 Ruta al script: lib/main.dart
 Nombre del script: main.dart
 Contenido del script:
+import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
@@ -3918,24 +3920,25 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:the_good_alarm/configuracion/app_settings.dart';
 import 'package:the_good_alarm/configuracion/theme_provider.dart';
+import 'package:the_good_alarm/screens/home.dart';
 import 'package:the_good_alarm/services/alarm_service.dart';
-
-// Importaremos estos archivos cuando los creemos
-// import 'config/theme_provider.dart';
-// import 'services/notification_service.dart';
-// import 'services/background_service.dart';
-// import 'screens/home_screen.dart';
+import 'package:logging/logging.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
+final _logger = Logger('MainApp');
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inicializar notificaciones
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
+  // Configurar logging
+  Logger.root.level = Level.ALL;
+  Logger.root.onRecord.listen((record) {
+    debugPrint('${record.level.name}: ${record.time}: ${record.message}');
+  });
 
+  // Inicializar notificaciones
   const AndroidInitializationSettings initializationSettingsAndroid =
       AndroidInitializationSettings('@mipmap/ic_launcher');
 
@@ -3959,7 +3962,7 @@ void main() async {
       },
     );
   } catch (e) {
-    print('Error initializing notifications: $e');
+    _logger.severe('Error initializing notifications: $e');
   }
 
   // Solicitar permisos
@@ -3974,30 +3977,152 @@ void main() async {
 Future<void> requestPermissions() async {
   await Permission.notification.request();
   await Permission.systemAlertWindow.request();
+  await Permission.locationWhenInUse.request();
+  await Permission.locationAlways.request();
 }
 
 Future<void> initializeService() async {
   final service = FlutterBackgroundService();
+
+  // Crear el canal de notificación
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'alarm_service', // id
+    'Servicio de Alarma', // title
+    description: 'Canal para el servicio de alarma en segundo plano',
+    importance: Importance.low,
+  );
+
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  // Crear el canal de notificación
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
 
   await service.configure(
     androidConfiguration: AndroidConfiguration(
       onStart: onStart,
       autoStart: true,
       isForegroundMode: true,
-      notificationChannelId: 'alarm_service',
-      initialNotificationTitle: 'Servicio de Alarma',
-      initialNotificationContent: 'Iniciando...',
+      notificationChannelId: channel.id,
+      initialNotificationTitle: channel.name,
+      initialNotificationContent: channel.description ?? 'Servicio en ejecución',
       foregroundServiceNotificationId: 888,
     ),
-    iosConfiguration:
-        IosConfiguration(), // Requerido por el paquete aunque no lo usemos
+    iosConfiguration: IosConfiguration(
+      autoStart: true,
+      onBackground: onIosBackground,
+      onForeground: onStart,
+    ),
   );
+
+  // Iniciar el servicio
+  await service.startService();
 }
 
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
-  // Lógica del servicio en segundo plano
-  // Aquí implementaremos la lógica para manejar las alarmas
+  // Asegúrate de inicializar correctamente
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+
+  // Configuración del canal de notificación
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'alarm_service', 
+    'Servicio de Alarma', 
+    description: 'Canal para el servicio de alarma en segundo plano',
+    importance: Importance.low,
+  );
+
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  // Configuración de la notificación
+  final AndroidNotificationDetails androidPlatformChannelSpecifics =
+      AndroidNotificationDetails(
+    channel.id,
+    channel.name,
+    channelDescription: channel.description,
+    importance: Importance.low,
+    priority: Priority.low,
+    ongoing: true,
+    autoCancel: false,
+  );
+  
+  final NotificationDetails platformChannelSpecifics =
+      NotificationDetails(android: androidPlatformChannelSpecifics);
+
+  // Mostrar notificación inicial
+  await flutterLocalNotificationsPlugin.show(
+    888,
+    'Servicio de Alarma',
+    'La aplicación está ejecutándose en segundo plano',
+    platformChannelSpecifics,
+  );
+
+  // Manejar actualizaciones
+  service.on('update').listen((event) async {
+    await flutterLocalNotificationsPlugin.show(
+      888,
+      'Servicio de Alarma',
+      'Ejecutándose en segundo plano',
+      platformChannelSpecifics,
+    );
+  });
+
+  // Timer para mantener el servicio activo
+  Timer.periodic(const Duration(minutes: 1), (timer) async {
+    // Cambiar la forma de manejar el servicio en primer plano
+    if (service is AndroidServiceInstance) {
+      // Verificar si el servicio está en primer plano
+      if (await service.isForegroundService()) {
+        // Mostrar notificación de actualización
+        await flutterLocalNotificationsPlugin.show(
+          888,
+          'Servicio de Alarma',
+          'Activo - ${DateTime.now().toString()}',
+          platformChannelSpecifics,
+        );
+
+        // Enviar datos al canal de Flutter
+        service.invoke(
+          'update',
+          {
+            "current_date": DateTime.now().toIso8601String(),
+          },
+        );
+      }
+    }
+  });
+
+  service.on('stopService').listen((event) {
+    service.stopSelf();
+  });
+}
+
+Future<void> updateNotification(String title, String body) async {
+  final androidPlatformChannelSpecifics = AndroidNotificationDetails(
+    'alarm_service',
+    'Servicio de Alarma',
+    channelDescription: 'Notificaciones del servicio de alarma',
+    importance: Importance.max,
+    priority: Priority.high,
+    ongoing: true,
+    autoCancel: false,
+  );
+
+  final platformChannelSpecifics = NotificationDetails(
+    android: androidPlatformChannelSpecifics,
+  );
+
+  await flutterLocalNotificationsPlugin.show(
+    888,
+    title,
+    body,
+    platformChannelSpecifics,
+  );
 }
 
 @pragma('vm:entry-point')
@@ -4008,7 +4133,7 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  @override
+@override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
@@ -4023,7 +4148,7 @@ class MyApp extends StatelessWidget {
             themeMode: themeProvider.themeMode,
             theme: themeProvider.getLightTheme(),
             darkTheme: themeProvider.getDarkTheme(),
-            home: const Placeholder(), // Aquí irá HomeScreen
+            home: const HomeScreen(), // Cambiado de Placeholder a HomeScreen
           );
         },
       ),
@@ -4031,103 +4156,220 @@ class MyApp extends StatelessWidget {
   }
 }
 
-
 --------------------------------------------------
 
 Ruta al script: android/app/build.gradle
 Nombre del script: build.gradle
 Contenido del script:
+// plugins {
+//     id "com.android.application"
+//     id "kotlin-android"
+//     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+//     id "dev.flutter.flutter-gradle-plugin"
+// }
+
+// android {
+//     namespace = "com.ando.devs.the_good_alarm"
+//     compileSdk = flutter.compileSdkVersion
+//     ndkVersion = flutter.ndkVersion
+
+//     compileOptions {
+//         sourceCompatibility = JavaVersion.VERSION_1_8
+//         targetCompatibility = JavaVersion.VERSION_1_8
+//     }
+
+//     kotlinOptions {
+//         jvmTarget = JavaVersion.VERSION_1_8
+//     }
+
+//     defaultConfig {
+//         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+//         applicationId = "com.ando.devs.the_good_alarm"
+//         // You can update the following values to match your application needs.
+//         // For more information, see: https://flutter.dev/to/review-gradle-config.
+//         minSdk = flutter.minSdkVersion
+//         targetSdk = flutter.targetSdkVersion
+//         versionCode = flutter.versionCode
+//         versionName = flutter.versionName
+
+//         // Agregar esto si no está presente
+//         manifestPlaceholders += [
+//             'foregroundServiceType': "dataSync|location|mediaPlayback"
+//         ]
+//     }
+
+//     buildTypes {
+//         release {
+//             // TODO: Add your own signing config for the release build.
+//             // Signing with the debug keys for now, so `flutter run --release` works.
+//             signingConfig = signingConfigs.debug
+//         }
+//     }
+
+//     // para manejar conflictos de manifest
+//     lintOptions {
+//         disable 'InvalidPackage'
+//         checkReleaseBuilds false
+//         abortOnError false
+//     }
+// }
+
+// flutter {
+//     source = "../.."
+// }
+
 plugins {
     id "com.android.application"
     id "kotlin-android"
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterRoot = localProperties.getProperty('flutter.sdk')
+if (flutterRoot == null) {
+    throw new GradleException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
 android {
-    namespace = "com.ando.devs.the_good_alarm"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    namespace "com.ando.devs.the_good_alarm"
+    compileSdkVersion flutter.compileSdkVersion
+    ndkVersion flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8
+        jvmTarget = '1.8'
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.ando.devs.the_good_alarm"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        applicationId "com.ando.devs.the_good_alarm"
+        minSdkVersion flutter.minSdkVersion
+        targetSdkVersion flutter.targetSdkVersion
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+        
+        manifestPlaceholders += [
+            'foregroundServiceType': "location|mediaPlayback"
+        ]
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            signingConfig signingConfigs.debug
         }
     }
+
+    // lintOptions {
+    //     disable 'InvalidPackage'
+    //     checkReleaseBuilds false
+    //     abortOnError false
+    // }
 }
 
 flutter {
-    source = "../.."
+    source '../..'
 }
 
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+}
 
 --------------------------------------------------
 
 Ruta al script: android/app/src/main/AndroidManifest.xml
 Nombre del script: AndroidManifest.xml
 Contenido del script:
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Permisos -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-    <application android:label="the_good_alarm" android:name="${applicationName}" android:icon="@mipmap/ic_launcher">
-        <service android:name="com.dexterous.flutterlocalnotifications.ForegroundService" android:exported="false" android:stopWithTask="false"/>
-        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:taskAffinity="" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
-            <!-- Specifies an Android theme to apply to this Activity as soon as
-                 the Android process has started. This theme is visible to the user
-                 while the Flutter UI initializes. After that, this theme continues
-                 to determine the Window background behind the Flutter UI. -->
-            <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <application
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:label="the_good_alarm">
+        <!-- tools:replace="android:foregroundServiceType"> -->
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:exported="true"
+            android:hardwareAccelerated="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:windowSoftInputMode="adjustResize">
+            
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+            
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Don't delete the meta-data below.
-             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
-        <meta-data android:name="flutterEmbedding" android:value="2" />
-    </application>
-    <!-- Required to query activities that can process text, see:
-         https://developer.android.com/training/package-visibility and
-         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
 
-         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+        <!-- Servicios -->
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:enabled="true"
+            android:exported="true"
+            android:foregroundServiceType="location|mediaPlayback"
+            android:stopWithTask="false"
+            tools:replace="android:exported"/>
+
+    </application>
+
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
     </queries>
-</manifest>
 
+</manifest>
 
 --------------------------------------------------
 
@@ -4146,6 +4388,19 @@ class MainActivity: FlutterActivity()
 Ruta al script: android/build.gradle
 Nombre del script: build.gradle
 Contenido del script:
+buildscript {
+    ext.kotlin_version = '1.7.10'
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:7.3.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
 allprojects {
     repositories {
         google()
@@ -4153,18 +4408,17 @@ allprojects {
     }
 }
 
-rootProject.buildDir = "../build"
+rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
 subprojects {
-    project.evaluationDependsOn(":app")
+    project.evaluationDependsOn(':app')
 }
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
-
 
 --------------------------------------------------
 
@@ -4174,6 +4428,8 @@ Contenido del script:
 org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G -XX:+HeapDumpOnOutOfMemoryError
 android.useAndroidX=true
 android.enableJetifier=true
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
+
 
 
 --------------------------------------------------
@@ -4208,6 +4464,7 @@ plugins {
 include ":app"
 
 
+
 --------------------------------------------------
 
 Ruta al script: pubspec.yaml
@@ -4226,6 +4483,7 @@ dependencies:
     sdk: flutter
   flutter_background_service: ^5.1.0
   flutter_local_notifications: ^18.0.1
+  logging: ^1.3.0
   permission_handler: ^11.3.1
   provider: ^6.1.2
   shared_preferences: ^2.3.4
@@ -4234,7 +4492,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true
