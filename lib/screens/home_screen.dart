@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:the_good_alarm/screens/active_alarms_screen.dart';
 import '../models/alarm.dart';
 import '../services/alarm_service.dart';
 import '../configuracion/theme_provider.dart';
@@ -24,13 +25,15 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          // AppBar con diseño especial
+          // Modificado SliverAppBar
           SliverAppBar(
             expandedHeight: 200.0,
             floating: false,
             pinned: true,
+            // Cambiar a false para que aparezca contraído por defecto
+            snap: false,
+            // Eliminar título
             flexibleSpace: FlexibleSpaceBar(
-              title: const Text('Mis Alarmas'),
               background: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -76,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          // Contenido principal
+          // Contenido principal (sin cambios)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -114,7 +117,18 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        final nextAlarm = _findNextAlarm(snapshot.data!);
+        final activeAlarms = snapshot.data!.where((a) => a.isEnabled).toList();
+        if (activeAlarms.isEmpty) {
+          return const Text(
+            'No hay alarmas activas',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+            ),
+          );
+        }
+
+        final nextAlarm = _findNextAlarm(activeAlarms);
         if (nextAlarm == null) {
           return const Text(
             'No hay alarmas activas',
@@ -127,13 +141,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return Column(
           children: [
-            Text(
-              _formatTime(nextAlarm.time),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 48,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _formatTime(nextAlarm.time),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 48,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Switch(
+                  value: nextAlarm.isEnabled,
+                  onChanged: (bool value) {
+                    alarmService.toggleAlarm(nextAlarm.id);
+                  },
+                  activeColor: Colors.white,
+                  inactiveThumbColor: Colors.grey,
+                ),
+              ],
             ),
             Text(
               _getTimeUntilAlarm(nextAlarm),
@@ -142,6 +170,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 fontSize: 16,
               ),
             ),
+            if (activeAlarms.length > 1)
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ActiveAlarmsScreen(),
+                    ),
+                  );
+                },
+                child: const Text(
+                  'Ver todas las alarmas activas',
+                  style: TextStyle(
+                    color: Colors.white,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
           ],
         );
       },
@@ -227,6 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
+        final alarms = snapshot.data ?? [];
 
         if (snapshot.data!.isEmpty) {
           return Center(
@@ -253,7 +300,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final activeAlarms = snapshot.data!
             .where((alarm) => alarm.isEnabled)
             .toList()
-          ..sort((a, b) => a.getNextAlarmTime().compareTo(b.getNextAlarmTime()));
+          ..sort(
+              (a, b) => a.getNextAlarmTime().compareTo(b.getNextAlarmTime()));
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -382,10 +430,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _createQuickAlarm(BuildContext context, Duration duration) async {
+  Future<void> _createQuickAlarm(
+      BuildContext context, Duration duration) async {
     final now = DateTime.now();
     final alarmTime = now.add(duration);
-    
+
     final alarm = Alarm(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       time: alarmTime,

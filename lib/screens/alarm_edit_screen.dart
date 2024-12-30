@@ -28,7 +28,7 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
   String? _selectedGame;
   String? _gameDifficulty;
   late int _snoozeTime;
-
+  bool _useVibration = true;
   @override
   void initState() {
     super.initState();
@@ -50,6 +50,7 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
     _selectedGame = widget.alarm?.selectedGame;
     _gameDifficulty = widget.alarm?.gameDifficulty;
     _snoozeTime = widget.alarm?.snoozeTime ?? 5;
+    _useVibration = widget.alarm?.useVibration ?? true;
   }
 
   @override
@@ -61,7 +62,7 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
   @override
   Widget build(BuildContext context) {
     final appSettings = Provider.of<AppSettings>(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.alarm == null ? 'Nueva Alarma' : 'Editar Alarma'),
@@ -135,7 +136,8 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
             // Configuración del juego
             SwitchListTile(
               title: const Text('Requerir juego para apagar'),
-              subtitle: const Text('Deberás completar un juego para apagar la alarma'),
+              subtitle: const Text(
+                  'Deberás completar un juego para apagar la alarma'),
               value: _requireGame,
               onChanged: (value) {
                 setState(() => _requireGame = value);
@@ -151,7 +153,8 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
                     ? 'Seleccionar juego'
                     : 'Juego: ${_getGameName(_selectedGame!)}'),
                 subtitle: _gameDifficulty != null
-                    ? Text('Dificultad: ${_getGameDifficulty(_gameDifficulty!)}')
+                    ? Text(
+                        'Dificultad: ${_getGameDifficulty(_gameDifficulty!)}')
                     : null,
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _selectGame,
@@ -183,6 +186,18 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
                 ],
               ),
             ),
+            ListTile(
+              title: const Text('Vibración'),
+              subtitle: const Text('Vibrar cuando suene la alarma'),
+              trailing: Switch(
+                value: _useVibration,
+                onChanged: (value) {
+                  setState(() {
+                    _useVibration = value;
+                  });
+                },
+              ),
+            ),
           ],
         ),
       ),
@@ -191,7 +206,7 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
 
   Widget _buildDaySelector() {
     const days = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-    
+
     return Wrap(
       spacing: 8,
       alignment: WrapAlignment.center,
@@ -292,6 +307,7 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
       requireGame: _requireGame,
       selectedGame: _selectedGame,
       gameDifficulty: _gameDifficulty,
+      useVibration: _useVibration,
     );
 
     if (widget.alarm != null) {

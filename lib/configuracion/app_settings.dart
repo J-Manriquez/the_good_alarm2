@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:the_good_alarm/services/vibration_service.dart';
 import '../utils/constants.dart';
 
 enum TimeFormat { h12, h24 }
@@ -17,10 +18,22 @@ class AppSettings with ChangeNotifier {
   InputFormat get inputFormat => _inputFormat;
   double get alarmVolume => _alarmVolume;
   bool get vibrationEnabled => _vibrationEnabled;
-  
+  late VibrationService _vibrationService;
+
   AppSettings() {
     _loadSettings();
+    _initializeVibration();
   }
+
+  Future<void> _initializeVibration() async {
+    _vibrationService = VibrationService();
+    await _vibrationService.initialize();
+    notifyListeners();
+  }
+
+  // Getter para el servicio de vibración
+  VibrationService get vibrationService => _vibrationService;
+
   
   Future<void> _loadSettings() async {
     _prefs = await SharedPreferences.getInstance();

@@ -13,6 +13,7 @@ class Alarm {
   String? selectedGame; // 'math' o 'memory'
   String? gameDifficulty; // 'easy', 'medium', 'hard'
   bool requireGame;
+  final bool useVibration;
   
   Alarm({
     required this.id,
@@ -27,6 +28,7 @@ class Alarm {
     this.selectedGame,
     this.gameDifficulty,
     this.requireGame = false,
+    this.useVibration = true,
   }) : weekDays = weekDays ?? List.filled(7, false);
 
   // Copia del objeto con posibles modificaciones
@@ -42,6 +44,7 @@ class Alarm {
     String? selectedGame,
     String? gameDifficulty,
     bool? requireGame,
+    bool? useVibration,
   }) {
     return Alarm(
       id: id,
@@ -56,6 +59,7 @@ class Alarm {
       selectedGame: selectedGame ?? this.selectedGame,
       gameDifficulty: gameDifficulty ?? this.gameDifficulty,
       requireGame: requireGame ?? this.requireGame,
+      useVibration: useVibration ?? this.useVibration,
     );
   }
 
@@ -74,6 +78,7 @@ class Alarm {
       'selectedGame': selectedGame,
       'gameDifficulty': gameDifficulty,
       'requireGame': requireGame,
+      'useVibration': useVibration,
     };
   }
 
@@ -92,6 +97,7 @@ class Alarm {
       selectedGame: json['selectedGame'],
       gameDifficulty: json['gameDifficulty'],
       requireGame: json['requireGame'],
+      useVibration: json['useVibration'] ?? true,
     );
   }
 

@@ -1,8 +1,318 @@
+Ruta al script: android/app/build.gradle
+Nombre del script: build.gradle
+Contenido del script:
+// plugins {
+//     id "com.android.application"
+//     id "kotlin-android"
+//     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+//     id "dev.flutter.flutter-gradle-plugin"
+// }
+
+// android {
+//     namespace = "com.ando.devs.the_good_alarm"
+//     compileSdk = flutter.compileSdkVersion
+//     ndkVersion = flutter.ndkVersion
+
+//     compileOptions {
+//         sourceCompatibility = JavaVersion.VERSION_1_8
+//         targetCompatibility = JavaVersion.VERSION_1_8
+//     }
+
+//     kotlinOptions {
+//         jvmTarget = JavaVersion.VERSION_1_8
+//     }
+
+//     defaultConfig {
+//         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+//         applicationId = "com.ando.devs.the_good_alarm"
+//         // You can update the following values to match your application needs.
+//         // For more information, see: https://flutter.dev/to/review-gradle-config.
+//         minSdk = flutter.minSdkVersion
+//         targetSdk = flutter.targetSdkVersion
+//         versionCode = flutter.versionCode
+//         versionName = flutter.versionName
+
+//         // Agregar esto si no está presente
+//         manifestPlaceholders += [
+//             'foregroundServiceType': "dataSync|location|mediaPlayback"
+//         ]
+//     }
+
+//     buildTypes {
+//         release {
+//             // TODO: Add your own signing config for the release build.
+//             // Signing with the debug keys for now, so `flutter run --release` works.
+//             signingConfig = signingConfigs.debug
+//         }
+//     }
+
+//     // para manejar conflictos de manifest
+//     lintOptions {
+//         disable 'InvalidPackage'
+//         checkReleaseBuilds false
+//         abortOnError false
+//     }
+// }
+
+// flutter {
+//     source = "../.."
+// }
+
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterRoot = localProperties.getProperty('flutter.sdk')
+if (flutterRoot == null) {
+    throw new GradleException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
+android {
+    namespace "com.ando.devs.the_good_alarm"
+    compileSdkVersion flutter.compileSdkVersion
+    ndkVersion flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+
+    defaultConfig {
+        applicationId "com.ando.devs.the_good_alarm"
+        minSdkVersion flutter.minSdkVersion
+        targetSdkVersion flutter.targetSdkVersion
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+        
+        manifestPlaceholders += [
+            'foregroundServiceType': "location|mediaPlayback"
+        ]
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    // lintOptions {
+    //     disable 'InvalidPackage'
+    //     checkReleaseBuilds false
+    //     abortOnError false
+    // }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+}
+
+--------------------------------------------------
+
+Ruta al script: android/app/src/main/AndroidManifest.xml
+Nombre del script: AndroidManifest.xml
+Contenido del script:
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Permisos -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <application
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:label="the_good_alarm">
+        <!-- tools:replace="android:foregroundServiceType"> -->
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:exported="true"
+            android:hardwareAccelerated="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:windowSoftInputMode="adjustResize">
+            
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+            
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+        <!-- Servicios -->
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:enabled="true"
+            android:exported="true"
+            android:foregroundServiceType="location|mediaPlayback"
+            android:stopWithTask="false"
+            tools:replace="android:exported"/>
+
+    </application>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+
+</manifest>
+
+--------------------------------------------------
+
+Ruta al script: android/build.gradle
+Nombre del script: build.gradle
+Contenido del script:
+buildscript {
+    ext.kotlin_version = '1.7.10'
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:7.3.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
+
+--------------------------------------------------
+
+Ruta al script: android/app/src/main/kotlin/com/example/the_good_alarm/MainActivity.kt
+Nombre del script: MainActivity.kt
+Contenido del script:
+package com.ando.devs.the_good_alarm
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity: FlutterActivity()
+
+
+--------------------------------------------------
+
+Ruta al script: android/gradle.properties
+Nombre del script: gradle.properties
+Contenido del script:
+org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G -XX:+HeapDumpOnOutOfMemoryError
+android.useAndroidX=true
+android.enableJetifier=true
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
+
+
+
+--------------------------------------------------
+
+Ruta al script: android/settings.gradle
+Nombre del script: settings.gradle
+Contenido del script:
+pluginManagement {
+    def flutterSdkPath = {
+        def properties = new Properties()
+        file("local.properties").withInputStream { properties.load(it) }
+        def flutterSdkPath = properties.getProperty("flutter.sdk")
+        assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
+        return flutterSdkPath
+    }()
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+    id "com.android.application" version "8.1.0" apply false
+    id "org.jetbrains.kotlin.android" version "1.8.22" apply false
+}
+
+include ":app"
+
+
+
+--------------------------------------------------
+
 Ruta al script: lib/configuracion/app_settings.dart
 Nombre del script: app_settings.dart
 Contenido del script:
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:the_good_alarm/services/vibration_service.dart';
 import '../utils/constants.dart';
 
 enum TimeFormat { h12, h24 }
@@ -20,10 +330,22 @@ class AppSettings with ChangeNotifier {
   InputFormat get inputFormat => _inputFormat;
   double get alarmVolume => _alarmVolume;
   bool get vibrationEnabled => _vibrationEnabled;
-  
+  late VibrationService _vibrationService;
+
   AppSettings() {
     _loadSettings();
+    _initializeVibration();
   }
+
+  Future<void> _initializeVibration() async {
+    _vibrationService = VibrationService();
+    await _vibrationService.initialize();
+    notifyListeners();
+  }
+
+  // Getter para el servicio de vibración
+  VibrationService get vibrationService => _vibrationService;
+
   
   Future<void> _loadSettings() async {
     _prefs = await SharedPreferences.getInstance();
@@ -159,6 +481,7 @@ class Alarm {
   String? selectedGame; // 'math' o 'memory'
   String? gameDifficulty; // 'easy', 'medium', 'hard'
   bool requireGame;
+  final bool useVibration;
   
   Alarm({
     required this.id,
@@ -173,6 +496,7 @@ class Alarm {
     this.selectedGame,
     this.gameDifficulty,
     this.requireGame = false,
+    this.useVibration = true,
   }) : weekDays = weekDays ?? List.filled(7, false);
 
   // Copia del objeto con posibles modificaciones
@@ -188,6 +512,7 @@ class Alarm {
     String? selectedGame,
     String? gameDifficulty,
     bool? requireGame,
+    bool? useVibration,
   }) {
     return Alarm(
       id: id,
@@ -202,6 +527,7 @@ class Alarm {
       selectedGame: selectedGame ?? this.selectedGame,
       gameDifficulty: gameDifficulty ?? this.gameDifficulty,
       requireGame: requireGame ?? this.requireGame,
+      useVibration: useVibration ?? this.useVibration,
     );
   }
 
@@ -220,6 +546,7 @@ class Alarm {
       'selectedGame': selectedGame,
       'gameDifficulty': gameDifficulty,
       'requireGame': requireGame,
+      'useVibration': useVibration,
     };
   }
 
@@ -238,6 +565,7 @@ class Alarm {
       selectedGame: json['selectedGame'],
       gameDifficulty: json['gameDifficulty'],
       requireGame: json['requireGame'],
+      useVibration: json['useVibration'] ?? true,
     );
   }
 
@@ -1135,7 +1463,7 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
   String? _selectedGame;
   String? _gameDifficulty;
   late int _snoozeTime;
-
+  bool _useVibration = true;
   @override
   void initState() {
     super.initState();
@@ -1157,6 +1485,7 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
     _selectedGame = widget.alarm?.selectedGame;
     _gameDifficulty = widget.alarm?.gameDifficulty;
     _snoozeTime = widget.alarm?.snoozeTime ?? 5;
+    _useVibration = widget.alarm?.useVibration ?? true;
   }
 
   @override
@@ -1168,7 +1497,7 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
   @override
   Widget build(BuildContext context) {
     final appSettings = Provider.of<AppSettings>(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.alarm == null ? 'Nueva Alarma' : 'Editar Alarma'),
@@ -1242,7 +1571,8 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
             // Configuración del juego
             SwitchListTile(
               title: const Text('Requerir juego para apagar'),
-              subtitle: const Text('Deberás completar un juego para apagar la alarma'),
+              subtitle: const Text(
+                  'Deberás completar un juego para apagar la alarma'),
               value: _requireGame,
               onChanged: (value) {
                 setState(() => _requireGame = value);
@@ -1258,7 +1588,8 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
                     ? 'Seleccionar juego'
                     : 'Juego: ${_getGameName(_selectedGame!)}'),
                 subtitle: _gameDifficulty != null
-                    ? Text('Dificultad: ${_getGameDifficulty(_gameDifficulty!)}')
+                    ? Text(
+                        'Dificultad: ${_getGameDifficulty(_gameDifficulty!)}')
                     : null,
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _selectGame,
@@ -1290,6 +1621,18 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
                 ],
               ),
             ),
+            ListTile(
+              title: const Text('Vibración'),
+              subtitle: const Text('Vibrar cuando suene la alarma'),
+              trailing: Switch(
+                value: _useVibration,
+                onChanged: (value) {
+                  setState(() {
+                    _useVibration = value;
+                  });
+                },
+              ),
+            ),
           ],
         ),
       ),
@@ -1298,7 +1641,7 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
 
   Widget _buildDaySelector() {
     const days = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-    
+
     return Wrap(
       spacing: 8,
       alignment: WrapAlignment.center,
@@ -1399,6 +1742,7 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
       requireGame: _requireGame,
       selectedGame: _selectedGame,
       gameDifficulty: _gameDifficulty,
+      useVibration: _useVibration,
     );
 
     if (widget.alarm != null) {
@@ -1413,6 +1757,7 @@ class _AlarmEditScreenState extends State<AlarmEditScreen> {
   }
 }
 
+
 --------------------------------------------------
 
 Ruta al script: lib/screens/alarm_list_screen.dart
@@ -1420,6 +1765,7 @@ Nombre del script: alarm_list_screen.dart
 Contenido del script:
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:the_good_alarm/screens/vibration_settings_screen.dart';
 import '../models/alarm.dart';
 import '../services/alarm_service.dart';
 import '../widgets/alarm_list_item.dart';
@@ -1476,8 +1822,9 @@ class AlarmListScreen extends StatelessWidget {
               child: CircularProgressIndicator(),
             );
           }
+          final alarms = snapshot.data ?? [];
 
-          final alarms = snapshot.data!;
+          // final alarms = snapshot.data!;
           
           if (alarms.isEmpty) {
             return Center(
@@ -1645,16 +1992,27 @@ class AlarmListScreen extends StatelessWidget {
                   label: '${(settings.alarmVolume * 100).round()}%',
                 ),
               ),
-              // Vibración
-              ListTile(
-                title: const Text('Vibración'),
-                trailing: Switch(
-                  value: settings.vibrationEnabled,
-                  onChanged: settings.setVibrationEnabled,
-                ),
+              // botón para configuración de vibración
+            ListTile(
+              title: const Text('Configuración de Vibración'),
+              subtitle: Text(
+                settings.vibrationService.isEnabled 
+                    ? 'Activada - ${settings.vibrationService.currentPattern}'
+                    : 'Desactivada',
               ),
-            ],
-          ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const VibrationSettingsScreen(),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -2279,6 +2637,96 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
 
 --------------------------------------------------
 
+Ruta al script: lib/screens/vibration_settings_screen.dart
+Nombre del script: vibration_settings_screen.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import '../services/vibration_service.dart';
+
+class VibrationSettingsScreen extends StatefulWidget {
+  const VibrationSettingsScreen({super.key});
+
+  @override
+  State<VibrationSettingsScreen> createState() => _VibrationSettingsScreenState();
+}
+
+class _VibrationSettingsScreenState extends State<VibrationSettingsScreen> {
+  final VibrationService _vibrationService = VibrationService();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Configuración de Vibración'),
+      ),
+      body: ListView(
+        children: [
+          SwitchListTile(
+            title: const Text('Vibración'),
+            subtitle: const Text('Activar o desactivar la vibración'),
+            value: _vibrationService.isEnabled,
+            onChanged: (value) async {
+              await _vibrationService.setEnabled(value);
+              setState(() {});
+            },
+          ),
+          if (_vibrationService.isEnabled) ...[
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'Patrones de Vibración',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            ...VibrationService.vibrationPatterns.keys.map(
+              (pattern) => _buildPatternTile(pattern),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPatternTile(String pattern) {
+    final isSelected = _vibrationService.currentPattern == pattern;
+    
+    return ListTile(
+      title: Text(
+        pattern.substring(0, 1).toUpperCase() + pattern.substring(1),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.play_arrow),
+            onPressed: () => _vibrationService.testVibration(pattern),
+          ),
+          Radio<String>(
+            value: pattern,
+            groupValue: _vibrationService.currentPattern,
+            onChanged: (value) async {
+              if (value != null) {
+                await _vibrationService.setPattern(value);
+                setState(() {});
+              }
+            },
+          ),
+        ],
+      ),
+      selected: isSelected,
+      onTap: () async {
+        await _vibrationService.setPattern(pattern);
+        setState(() {});
+      },
+    );
+  }
+}
+
+--------------------------------------------------
+
 Ruta al script: lib/services/alarm_service.dart
 Nombre del script: alarm_service.dart
 Contenido del script:
@@ -2291,14 +2739,18 @@ import 'notification_service.dart';
 class AlarmService {
   static final AlarmService _instance = AlarmService._internal();
   factory AlarmService() => _instance;
-  AlarmService._internal();
+  AlarmService._internal() {
+    // Añadir esto para asegurar que el stream esté inicializado
+    _initializeStream();
+  }
 
   static const String _storageKey = 'alarms';
   final NotificationService _notificationService = NotificationService();
   late SharedPreferences _prefs;
   List<Alarm> _alarms = [];
 
-  final _alarmsController = StreamController<List<Alarm>>.broadcast();
+  // Convertir a un broadcast StreamController
+  var _alarmsController = StreamController<List<Alarm>>.broadcast(sync: true);
   Stream<List<Alarm>> get alarmsStream => _alarmsController.stream;
 
   // Getter para la lista de alarmas
@@ -2309,29 +2761,54 @@ class AlarmService {
     await _loadAlarms();
   }
 
+  // Nuevo método para inicializar el stream
+  void _initializeStream() {
+    if (_alarmsController.isClosed) {
+      _alarmsController = StreamController<List<Alarm>>.broadcast(sync: true);
+    }
+  }
+
   void _notifyListeners() {
-    _alarmsController.add(_alarms);
+    if (!_alarmsController.isClosed) {
+      _alarmsController.add(List.unmodifiable(_alarms));
+    }
   }
 
   Future<void> _loadAlarms() async {
-    final String? alarmsJson = _prefs.getString(_storageKey);
-    if (alarmsJson != null) {
-      final List<dynamic> alarmsList = jsonDecode(alarmsJson);
-      _alarms = alarmsList.map((json) => Alarm.fromJson(json)).toList();
+    try {
+      final String? alarmsJson = _prefs.getString(_storageKey);
+      if (alarmsJson != null) {
+        final List<dynamic> alarmsList = jsonDecode(alarmsJson);
+        _alarms = alarmsList.map((json) => Alarm.fromJson(json)).toList();
 
-      // Reprogramar alarmas activas
-      for (final alarm in _alarms) {
-        if (alarm.isEnabled) {
-          await _notificationService.scheduleAlarm(alarm);
+        // Reprogramar alarmas activas
+        for (final alarm in _alarms) {
+          if (alarm.isEnabled) {
+            await _notificationService.scheduleAlarm(alarm);
+          }
         }
+      } else {
+        _alarms = [];
       }
+
+      // Añadir esto para asegurar que el stream se actualice
+      _notifyListeners();
+    } catch (e) {
+      print('Error al cargar alarmas: $e');
+      _alarms = [];
+      _notifyListeners();
     }
   }
 
   Future<void> _saveAlarms() async {
-    final String alarmsJson =
-        jsonEncode(_alarms.map((a) => a.toJson()).toList());
-    await _prefs.setString(_storageKey, alarmsJson);
+    try {
+      final String alarmsJson =
+          jsonEncode(_alarms.map((a) => a.toJson()).toList());
+      await _prefs.setString(_storageKey, alarmsJson);
+      _notifyListeners();
+    } catch (e) {
+      print('Error al guardar alarmas: $e');
+    }
   }
 
   Future<void> addAlarm(Alarm alarm) async {
@@ -2340,19 +2817,17 @@ class AlarmService {
       await _notificationService.scheduleAlarm(alarm);
     }
     await _saveAlarms();
-    _notifyListeners();  
   }
 
   Future<void> updateAlarm(Alarm alarm) async {
     final index = _alarms.indexWhere((a) => a.id == alarm.id);
     if (index != -1) {
-      await _notificationService.cancelAlarm(alarm.id);
+      await _notificationService.cancelAlarm(_alarms[index].id);
       _alarms[index] = alarm;
       if (alarm.isEnabled) {
         await _notificationService.scheduleAlarm(alarm);
       }
       await _saveAlarms();
-      _notifyListeners();  
     }
   }
 
@@ -2360,18 +2835,21 @@ class AlarmService {
     await _notificationService.cancelAlarm(alarmId);
     _alarms.removeWhere((a) => a.id == alarmId);
     await _saveAlarms();
-    _notifyListeners();  
   }
 
   Future<void> toggleAlarm(String alarmId) async {
     final index = _alarms.indexWhere((a) => a.id == alarmId);
     if (index != -1) {
-      _alarms[index].toggleEnabled();
+      _alarms[index] = _alarms[index].copyWith(
+        isEnabled: !_alarms[index].isEnabled,
+      );
+
       if (_alarms[index].isEnabled) {
         await _notificationService.scheduleAlarm(_alarms[index]);
       } else {
         await _notificationService.cancelAlarm(alarmId);
       }
+
       await _saveAlarms();
     }
   }
@@ -2396,7 +2874,7 @@ class AlarmService {
       await _notificationService.scheduleAlarm(alarm);
     }
     await _saveAlarms();
-    _notifyListeners();  
+    _notifyListeners();
   }
 
   List<Alarm> getActiveAlarms() {
@@ -2408,6 +2886,11 @@ class AlarmService {
         .where((alarm) => alarm.isEnabled && alarm.shouldRingOn(date))
         .toList();
   }
+
+   void dispose() {
+    _alarmsController.close();
+  }
+
 }
 
 
@@ -2561,10 +3044,13 @@ Future<void> _handleDeviceBoot(
 Ruta al script: lib/services/notification_service.dart
 Nombre del script: notification_service.dart
 Contenido del script:
+import 'dart:typed_data';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../models/alarm.dart';
+import '../services/alarm_service.dart';
+import 'package:flutter/services.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
-import '../models/alarm.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -2573,17 +3059,20 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
   
+  // Canales de notificación
   static const String alarmChannelId = 'alarm_channel';
-  static const String alarmChannelName = 'Alarmas';
-  static const String alarmChannelDescription = 'Notificaciones de alarmas';
+  static const String snoozeChannelId = 'snooze_channel';
+  static const String reminderChannelId = 'reminder_channel';
   
+  // IDs de acciones
   static const String snoozeActionId = 'SNOOZE';
   static const String stopActionId = 'STOP';
   static const String openActionId = 'OPEN';
 
   Future<void> initialize() async {
+    // Inicializar timezone
     tz.initializeTimeZones();
-    
+
     // Configuración para Android
     const AndroidInitializationSettings androidSettings = 
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -2592,16 +3081,18 @@ class NotificationService {
       android: androidSettings,
     );
 
-    // Inicializar notificaciones
+    // Inicializar plugin
     await _notifications.initialize(
       settings,
-      onDidReceiveNotificationResponse: _onNotificationResponse,
+      onDidReceiveNotificationResponse: (NotificationResponse response) async {
+        await _onNotificationResponse(response);
+      },
       onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationResponse,
     );
 
     // Configurar canales
     await _setupNotificationChannels();
-
+    
     // Solicitar permisos
     await _requestPermissions();
   }
@@ -2610,8 +3101,8 @@ class NotificationService {
     // Canal principal para alarmas
     const AndroidNotificationChannel alarmChannel = AndroidNotificationChannel(
       alarmChannelId,
-      alarmChannelName,
-      description: alarmChannelDescription,
+      'Alarmas',
+      description: 'Notificaciones de alarmas activas',
       importance: Importance.max,
       enableVibration: true,
       enableLights: true,
@@ -2620,67 +3111,43 @@ class NotificationService {
       showBadge: true,
     );
 
-    await _notifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(alarmChannel);
-  }
+    // Canal para recordatorios de snooze
+    const AndroidNotificationChannel snoozeChannel = AndroidNotificationChannel(
+      snoozeChannelId,
+      'Posponer Alarmas',
+      description: 'Notificaciones de alarmas pospuestas',
+      importance: Importance.high,
+      enableVibration: true,
+      playSound: true,
+    );
 
-  Future<void> _requestPermissions() async {
-    final platform = _notifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
-            
+    // Canal para recordatorios generales
+    const AndroidNotificationChannel reminderChannel = AndroidNotificationChannel(
+      reminderChannelId,
+      'Recordatorios',
+      description: 'Recordatorios y avisos generales',
+      importance: Importance.low, // Cambiado de default a low
+      enableVibration: true,
+    );
+
+    final platform = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    
     if (platform != null) {
-      await platform.requestNotificationsPermission();
+      await platform.createNotificationChannel(alarmChannel);
+      await platform.createNotificationChannel(snoozeChannel);
+      await platform.createNotificationChannel(reminderChannel);
     }
   }
-  
 
-  Future<void> showAlarmNotification(Alarm alarm) async {
-    const androidPlatformChannelSpecifics = AndroidNotificationDetails(
-      alarmChannelId,
-      alarmChannelName,
-      channelDescription: alarmChannelDescription,
-      importance: Importance.max,
-      priority: Priority.max,
-      fullScreenIntent: true,
-      category: AndroidNotificationCategory.alarm,
-      actions: [
-        AndroidNotificationAction(
-          snoozeActionId,
-          'Posponer',
-          showsUserInterface: true,
-          cancelNotification: false,
-        ),
-        AndroidNotificationAction(
-          stopActionId,
-          'Detener',
-          showsUserInterface: true,
-          cancelNotification: true,
-        ),
-      ],
-      sound: RawResourceAndroidNotificationSound('alarm_sound'),
-      ongoing: true,
-      autoCancel: false,
-    );
-
-    await _notifications.show(
-      alarm.id.hashCode,
-      'Alarma - ${alarm.name}',
-      'Es hora de despertar',
-      const NotificationDetails(android: androidPlatformChannelSpecifics),
-      payload: alarm.toJsonString(),
-    );
-  }
-
+  // Método para programar alarmas
   Future<void> scheduleAlarm(Alarm alarm) async {
     final nextAlarmTime = alarm.getNextAlarmTime();
     
     const androidDetails = AndroidNotificationDetails(
       alarmChannelId,
-      alarmChannelName,
-      channelDescription: alarmChannelDescription,
+      'Alarma Programada',
+      channelDescription: 'Notificación de alarma programada',
       importance: Importance.max,
       priority: Priority.max,
       fullScreenIntent: true,
@@ -2717,17 +3184,79 @@ class NotificationService {
     );
   }
 
-  Future<void> cancelAlarm(String alarmId) async {
-    await _notifications.cancel(alarmId.hashCode);
+  Future<void> showAlarmNotification(Alarm alarm) async {
+    final now = DateTime.now();
+    final bool isSnoozeAllowed = alarm.canSnooze();
+
+    final List<AndroidNotificationAction> actions = [
+      if (isSnoozeAllowed)
+        const AndroidNotificationAction(
+          snoozeActionId,
+          'Posponer',
+          showsUserInterface: true,
+          cancelNotification: false,
+        ),
+      const AndroidNotificationAction(
+        stopActionId,
+        'Detener',
+        showsUserInterface: true,
+        cancelNotification: true,
+      ),
+    ];
+
+    final androidDetails = AndroidNotificationDetails(
+      alarmChannelId,
+      'Alarma',
+      channelDescription: 'Notificación de alarma activa',
+      importance: Importance.max,
+      priority: Priority.max,
+      fullScreenIntent: true,
+      actions: actions,
+      category: AndroidNotificationCategory.alarm,
+      sound: const RawResourceAndroidNotificationSound('alarm_sound'),
+      playSound: true,
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 500, 500, 500]),
+      ongoing: true,
+      autoCancel: false,
+    );
+
+    final details = NotificationDetails(android: androidDetails);
+
+    await _notifications.show(
+      alarm.id.hashCode,
+      _getNotificationTitle(alarm),
+      _getNotificationBody(alarm, now),
+      details,
+      payload: alarm.toJsonString(),
+    );
+
+    await _vibrate();
   }
 
-  Future<void> cancelAllAlarms() async {
-    await _notifications.cancelAll();
+  Future<void> showSnoozeNotification(Alarm alarm) async {
+    final androidDetails = AndroidNotificationDetails(
+      snoozeChannelId,
+      'Alarma Pospuesta',
+      channelDescription: 'Notificación de alarma pospuesta',
+      importance: Importance.high,
+      priority: Priority.high,
+      enableVibration: true,
+      autoCancel: true,
+    );
+
+    final details = NotificationDetails(android: androidDetails);
+
+    await _notifications.show(
+      alarm.id.hashCode + 1,
+      'Alarma Pospuesta',
+      'La alarma sonará nuevamente en ${alarm.snoozeTime} minutos',
+      details,
+      payload: alarm.toJsonString(),
+    );
   }
 
-  static Future<void> _onNotificationResponse(
-    NotificationResponse response,
-  ) async {
+  Future<void> _onNotificationResponse(NotificationResponse response) async {
     final String? payload = response.payload;
     if (payload == null) return;
 
@@ -2751,25 +3280,451 @@ class NotificationService {
   static Future<void> _onBackgroundNotificationResponse(
     NotificationResponse response,
   ) async {
-    await _onNotificationResponse(response);
+    // Manejar respuesta en segundo plano
+    final notificationService = NotificationService();
+    await notificationService._onNotificationResponse(response);
   }
 
-  static Future<void> _handleSnooze(Alarm alarm) async {
-    // Implementar lógica de snooze
+  Future<void> _handleSnooze(Alarm alarm) async {
+    final alarmService = AlarmService();
+    
+    if (!alarm.canSnooze()) {
+      await showReminderNotification(
+        'No se puede posponer',
+        'Has alcanzado el límite de repeticiones',
+      );
+      return;
+    }
+
+    await alarmService.snoozeAlarm(alarm.id);
+    await showSnoozeNotification(alarm);
+    await _vibrate(pattern: [0, 100, 100, 100]);
   }
 
-  static Future<void> _handleStop(Alarm alarm) async {
-    // Implementar lógica de stop
+  Future<void> _handleStop(Alarm alarm) async {
+    final alarmService = AlarmService();
+    await alarmService.stopAlarm(alarm.id);
+    await cancelAlarm(alarm.id);
+    await _vibrate(pattern: [0, 50]);
   }
 
-  static Future<void> _handleOpen(Alarm alarm) async {
-    // Implementar lógica para abrir la app
+  Future<void> _handleOpen(Alarm alarm) async {
+    // Se implementará cuando se añada la navegación
+  }
+
+  Future<void> cancelAlarm(String alarmId) async {
+    await _notifications.cancel(alarmId.hashCode);
+  }
+
+  Future<void> cancelAllAlarms() async {
+    await _notifications.cancelAll();
+  }
+
+  Future<void> _requestPermissions() async {
+    final platform = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+            
+    if (platform != null) {
+      await platform.requestNotificationsPermission();
+    }
+  }
+
+  Future<void> showReminderNotification(String title, String body) async {
+    final androidDetails = AndroidNotificationDetails(
+      reminderChannelId,
+      'Recordatorio',
+      channelDescription: 'Notificación de recordatorio',
+      importance: Importance.low, // Cambiado de default a low
+      priority: Priority.low, // Cambiado de default a low
+      autoCancel: true,
+    );
+
+    final details = NotificationDetails(android: androidDetails);
+
+    await _notifications.show(
+      DateTime.now().millisecondsSinceEpoch.hashCode,
+      title,
+      body,
+      details,
+    );
+  }
+
+  String _getNotificationTitle(Alarm alarm) {
+    if (alarm.name.isNotEmpty) {
+      return '¡Alarma! - ${alarm.name}';
+    }
+    return '¡Alarma!';
+  }
+
+  String _getNotificationBody(Alarm alarm, DateTime now) {
+    final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    if (alarm.requireGame) {
+      return 'Son las $timeStr - Completa el juego para detener la alarma';
+    }
+    return 'Son las $timeStr';
+  }
+
+  Future<void> _vibrate({List<int>? pattern}) async {
+    try {
+      if (pattern != null) {
+        await SystemChannels.platform.invokeMethod('HapticFeedback.vibrate', pattern);
+      } else {
+        await SystemChannels.platform.invokeMethod('HapticFeedback.vibrate');
+      }
+    } catch (e) {
+      // Manejar error de vibración
+      print('Error al vibrar: $e');
+    }
   }
 
   String _formatTime(DateTime time) {
-    final hours = time.hour.toString().padLeft(2, '0');
-    final minutes = time.minute.toString().padLeft(2, '0');
-    return '$hours:$minutes';
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/services/permission_service.dart
+Nombre del script: permission_service.dart
+Contenido del script:
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class PermissionService {
+  static final PermissionService _instance = PermissionService._internal();
+  factory PermissionService() => _instance;
+  PermissionService._internal();
+
+  // Clave para SharedPreferences
+  static const String _tempSkipPermissionsKey = 'temp_skip_permissions';
+
+  // Separar permisos por categorías
+  final List<Permission> _criticalPermissions = [
+    Permission.notification,
+    Permission.systemAlertWindow,
+  ];
+
+  final List<Permission> _optimizationPermissions = [
+    Permission.ignoreBatteryOptimizations,
+    Permission.accessNotificationPolicy,
+  ];
+
+  final List<Permission> _optionalPermissions = [
+    Permission.scheduleExactAlarm,
+  ];
+
+  // Estado de los permisos
+  final Map<Permission, bool> _permissionStatus = {};
+  bool _temporarilySkipped = false;
+
+  // Stream para notificar cambios en los permisos
+  final _permissionController = StreamController<Map<Permission, bool>>.broadcast();
+  Stream<Map<Permission, bool>> get permissionStream => _permissionController.stream;
+
+  // Verificar permisos al iniciar
+  Future<bool> checkInitialPermissions() async {
+    // Verificar si los permisos están temporalmente ignorados
+    final prefs = await SharedPreferences.getInstance();
+    _temporarilySkipped = prefs.getBool(_tempSkipPermissionsKey) ?? false;
+
+    bool allCriticalGranted = true;
+    
+    // Verificar permisos críticos
+    for (var permission in _criticalPermissions) {
+      final status = await permission.status;
+      _permissionStatus[permission] = status.isGranted;
+      if (!status.isGranted) {
+        allCriticalGranted = false;
+      }
+    }
+
+    // Verificar permisos de optimización
+    for (var permission in _optimizationPermissions) {
+      final status = await permission.status;
+      _permissionStatus[permission] = status.isGranted;
+    }
+
+    _permissionController.add(_permissionStatus);
+    return allCriticalGranted || _temporarilySkipped;
+  }
+
+  Future<void> temporarilySkipPermissions() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_tempSkipPermissionsKey, true);
+    _temporarilySkipped = true;
+    _permissionController.add(_permissionStatus);
+  }
+
+  Future<void> resetTemporarySkip() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tempSkipPermissionsKey);
+    _temporarilySkipped = false;
+  }
+
+  // Solicitar permisos críticos y mostrar diálogo para optimizaciones
+  Future<bool> requestRequiredPermissions(BuildContext context) async {
+    // Primero solicitar permisos críticos
+    bool allCriticalGranted = true;
+    for (var permission in _criticalPermissions) {
+      if (!await permission.isGranted) {
+        final status = await permission.request();
+        _permissionStatus[permission] = status.isGranted;
+        if (!status.isGranted) {
+          allCriticalGranted = false;
+        }
+      } else {
+        _permissionStatus[permission] = true;
+      }
+    }
+
+    // Si los permisos críticos están concedidos, mostrar diálogo para optimizaciones
+    if (allCriticalGranted && context.mounted) {
+      await _showOptimizationDialog(context);
+    }
+
+    _permissionController.add(_permissionStatus);
+    return allCriticalGranted;
+  }
+
+  Future<void> _showOptimizationDialog(BuildContext context) async {
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Optimización Recomendada'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Para garantizar el mejor funcionamiento de las alarmas, recomendamos:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            _buildOptimizationItem(
+              context,
+              'Desactivar optimización de batería',
+              'Para que las alarmas funcionen incluso en segundo plano',
+              Permission.ignoreBatteryOptimizations,
+            ),
+            const SizedBox(height: 8),
+            _buildOptimizationItem(
+              context,
+              'Permitir control de sonido',
+              'Para gestionar el volumen de las alarmas',
+              Permission.accessNotificationPolicy,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await temporarilySkipPermissions();
+              if (context.mounted) {
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Más tarde'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await openAppSettings();
+            },
+            child: const Text('Configurar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOptimizationItem(
+    BuildContext context,
+    String title,
+    String description,
+    Permission permission,
+  ) {
+    return FutureBuilder<bool>(
+      future: permission.isGranted,
+      builder: (context, snapshot) {
+        final isGranted = snapshot.data ?? false;
+        return Row(
+          children: [
+            Icon(
+              isGranted ? Icons.check_circle : Icons.warning,
+              color: isGranted ? Colors.green : Colors.orange,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    description,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  bool get areAllCriticalPermissionsGranted {
+    return _criticalPermissions.every(
+      (permission) => _permissionStatus[permission] == true,
+    ) || _temporarilySkipped;
+  }
+
+  bool isPermissionGranted(Permission permission) {
+    return _permissionStatus[permission] ?? false;
+  }
+
+  void dispose() {
+    _permissionController.close();
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/services/sound_service.dart
+Nombre del script: sound_service.dart
+Contenido del script:
+import 'package:flutter/services.dart';
+
+class SoundService {
+  static final SoundService _instance = SoundService._internal();
+  factory SoundService() => _instance;
+  SoundService._internal();
+
+  static const platform = MethodChannel('com.example.alarm/sound');
+
+  Future<void> playAlarmSound() async {
+    try {
+      await platform.invokeMethod('playAlarmSound');
+    } catch (e) {
+      print('Error playing alarm sound: $e');
+    }
+  }
+
+  Future<void> stopAlarmSound() async {
+    try {
+      await platform.invokeMethod('stopAlarmSound');
+    } catch (e) {
+      print('Error stopping alarm sound: $e');
+    }
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/services/vibration_service.dart
+Nombre del script: vibration_service.dart
+Contenido del script:
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class VibrationService {
+  static final VibrationService _instance = VibrationService._internal();
+  factory VibrationService() => _instance;
+  VibrationService._internal();
+
+  static const String _prefVibrationEnabled = 'vibration_enabled';
+  static const String _prefVibrationPattern = 'vibration_pattern';
+
+  // Patrones predefinidos (duración en milisegundos)
+  static const Map<String, List<int>> vibrationPatterns = {
+    'suave': [0, 200, 200, 200],
+    'normal': [0, 500, 200, 500],
+    'intenso': [0, 1000, 200, 1000, 200, 1000],
+    'sos': [0, 100, 100, 100, 100, 100, 200, 200, 200, 100, 100, 100],
+    'escalado': [0, 100, 100, 200, 100, 300, 100, 400],
+  };
+
+  bool _isEnabled = true;
+  String _currentPattern = 'normal';
+  
+  // Inicializar el servicio
+  Future<void> initialize() async {
+    final prefs = await SharedPreferences.getInstance();
+    _isEnabled = prefs.getBool(_prefVibrationEnabled) ?? true;
+    _currentPattern = prefs.getString(_prefVibrationPattern) ?? 'normal';
+  }
+
+  // Getters y Setters
+  bool get isEnabled => _isEnabled;
+  String get currentPattern => _currentPattern;
+
+  Future<void> setEnabled(bool enabled) async {
+    _isEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefVibrationEnabled, enabled);
+  }
+
+  Future<void> setPattern(String pattern) async {
+    if (vibrationPatterns.containsKey(pattern)) {
+      _currentPattern = pattern;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefVibrationPattern, pattern);
+    }
+  }
+
+  // Métodos de vibración
+  Future<void> vibrate({String? pattern}) async {
+    if (!_isEnabled) return;
+
+    try {
+      final selectedPattern = pattern ?? _currentPattern;
+      final vibrationPattern = vibrationPatterns[selectedPattern] ?? vibrationPatterns['normal']!;
+
+      // Usar la plataforma para vibrar
+      await SystemChannels.platform.invokeMethod('HapticFeedback.vibrate', vibrationPattern);
+    } catch (e) {
+      print('Error al vibrar: $e');
+    }
+  }
+
+  // Vibración de prueba
+  Future<void> testVibration(String pattern) async {
+    if (!_isEnabled) return;
+    await vibrate(pattern: pattern);
+  }
+
+  // Vibración de alarma
+  Future<void> startAlarmVibration() async {
+    if (!_isEnabled) return;
+    
+    // Patrón continuo para alarma
+    while (_isEnabled) {
+      await vibrate();
+      await Future.delayed(const Duration(seconds: 1));
+    }
+  }
+
+  // Detener vibración
+  void stopVibration() {
+    _isEnabled = false;
+  }
+
+  // Vibración de confirmación
+  Future<void> vibrateConfirmation() async {
+    if (!_isEnabled) return;
+    await vibrate(pattern: 'suave');
+  }
+
+  // Vibración de error
+  Future<void> vibrateError() async {
+    if (!_isEnabled) return;
+    await vibrate(pattern: 'sos');
   }
 }
 
@@ -3908,6 +4863,121 @@ class _TimeInputWithNumpadState extends State<TimeInputWithNumpad> {
 
 --------------------------------------------------
 
+Ruta al script: lib/widgets/permission_wrapper.dart
+Nombre del script: permission_wrapper.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../services/permission_service.dart';
+
+class PermissionWrapper extends StatefulWidget {
+  final Widget child;
+
+  const PermissionWrapper({
+    super.key,
+    required this.child,
+  });
+
+  @override
+  State<PermissionWrapper> createState() => _PermissionWrapperState();
+}
+
+class _PermissionWrapperState extends State<PermissionWrapper> {
+  final PermissionService _permissionService = PermissionService();
+  bool _checkingPermissions = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPermissions();
+  }
+
+  Future<void> _checkPermissions() async {
+    await _permissionService.checkInitialPermissions();
+    if (!_permissionService.areAllCriticalPermissionsGranted && mounted) {
+      await _permissionService.requestRequiredPermissions(context);
+    }
+    if (mounted) {
+      setState(() {
+        _checkingPermissions = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_checkingPermissions) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (!_permissionService.areAllCriticalPermissionsGranted) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Permisos Necesarios',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Para usar las alarmas, necesitamos algunos permisos básicos.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: () async {
+                        await _permissionService.temporarilySkipPermissions();
+                        if (mounted) {
+                          setState(() {});
+                        }
+                      },
+                      child: const Text('Más tarde'),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton(
+                      onPressed: () async {
+                        await _permissionService.requestRequiredPermissions(context);
+                        if (mounted) {
+                          setState(() {});
+                        }
+                      },
+                      child: const Text('Conceder Permisos'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return widget.child;
+  }
+}
+
+--------------------------------------------------
+
 Ruta al script: lib/main.dart
 Nombre del script: main.dart
 Contenido del script:
@@ -3920,9 +4990,12 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:the_good_alarm/configuracion/app_settings.dart';
 import 'package:the_good_alarm/configuracion/theme_provider.dart';
-import 'package:the_good_alarm/screens/home.dart';
+import 'package:the_good_alarm/screens/home_screen.dart';
 import 'package:the_good_alarm/services/alarm_service.dart';
 import 'package:logging/logging.dart';
+import 'package:the_good_alarm/services/notification_service.dart';
+import 'package:the_good_alarm/services/permission_service.dart';
+import 'package:the_good_alarm/widgets/permission_wrapper.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -3968,6 +5041,16 @@ void main() async {
   // Solicitar permisos
   await requestPermissions();
 
+  // Inicializar servicios
+  final permissionService = PermissionService();
+  await permissionService.resetTemporarySkip(); // Resetear el estado temporal al inicio
+
+  final notificationService = NotificationService();
+  await notificationService.initialize();
+  
+  final alarmService = AlarmService();
+  await alarmService.initialize();
+
   // Iniciar servicio en segundo plano
   await initializeService();
 
@@ -4008,7 +5091,8 @@ Future<void> initializeService() async {
       isForegroundMode: true,
       notificationChannelId: channel.id,
       initialNotificationTitle: channel.name,
-      initialNotificationContent: channel.description ?? 'Servicio en ejecución',
+      initialNotificationContent:
+          channel.description ?? 'Servicio en ejecución',
       foregroundServiceNotificationId: 888,
     ),
     iosConfiguration: IosConfiguration(
@@ -4030,8 +5114,8 @@ void onStart(ServiceInstance service) async {
 
   // Configuración del canal de notificación
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'alarm_service', 
-    'Servicio de Alarma', 
+    'alarm_service',
+    'Servicio de Alarma',
     description: 'Canal para el servicio de alarma en segundo plano',
     importance: Importance.low,
   );
@@ -4050,7 +5134,7 @@ void onStart(ServiceInstance service) async {
     ongoing: true,
     autoCancel: false,
   );
-  
+
   final NotificationDetails platformChannelSpecifics =
       NotificationDetails(android: androidPlatformChannelSpecifics);
 
@@ -4133,13 +5217,14 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-@override
+  @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AppSettings()),
         Provider<AlarmService>(create: (_) => AlarmService()),
+        Provider<PermissionService>(create: (_) => PermissionService()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
@@ -4148,321 +5233,15 @@ class MyApp extends StatelessWidget {
             themeMode: themeProvider.themeMode,
             theme: themeProvider.getLightTheme(),
             darkTheme: themeProvider.getDarkTheme(),
-            home: const HomeScreen(), // Cambiado de Placeholder a HomeScreen
+            home: PermissionWrapper(
+              child: HomeScreen(), // Tu pantalla principal
+            ),
           );
         },
       ),
     );
   }
 }
-
---------------------------------------------------
-
-Ruta al script: android/app/build.gradle
-Nombre del script: build.gradle
-Contenido del script:
-// plugins {
-//     id "com.android.application"
-//     id "kotlin-android"
-//     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
-//     id "dev.flutter.flutter-gradle-plugin"
-// }
-
-// android {
-//     namespace = "com.ando.devs.the_good_alarm"
-//     compileSdk = flutter.compileSdkVersion
-//     ndkVersion = flutter.ndkVersion
-
-//     compileOptions {
-//         sourceCompatibility = JavaVersion.VERSION_1_8
-//         targetCompatibility = JavaVersion.VERSION_1_8
-//     }
-
-//     kotlinOptions {
-//         jvmTarget = JavaVersion.VERSION_1_8
-//     }
-
-//     defaultConfig {
-//         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-//         applicationId = "com.ando.devs.the_good_alarm"
-//         // You can update the following values to match your application needs.
-//         // For more information, see: https://flutter.dev/to/review-gradle-config.
-//         minSdk = flutter.minSdkVersion
-//         targetSdk = flutter.targetSdkVersion
-//         versionCode = flutter.versionCode
-//         versionName = flutter.versionName
-
-//         // Agregar esto si no está presente
-//         manifestPlaceholders += [
-//             'foregroundServiceType': "dataSync|location|mediaPlayback"
-//         ]
-//     }
-
-//     buildTypes {
-//         release {
-//             // TODO: Add your own signing config for the release build.
-//             // Signing with the debug keys for now, so `flutter run --release` works.
-//             signingConfig = signingConfigs.debug
-//         }
-//     }
-
-//     // para manejar conflictos de manifest
-//     lintOptions {
-//         disable 'InvalidPackage'
-//         checkReleaseBuilds false
-//         abortOnError false
-//     }
-// }
-
-// flutter {
-//     source = "../.."
-// }
-
-plugins {
-    id "com.android.application"
-    id "kotlin-android"
-    id "dev.flutter.flutter-gradle-plugin"
-}
-
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file('local.properties')
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.withReader('UTF-8') { reader ->
-        localProperties.load(reader)
-    }
-}
-
-def flutterRoot = localProperties.getProperty('flutter.sdk')
-if (flutterRoot == null) {
-    throw new GradleException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
-}
-
-def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
-if (flutterVersionCode == null) {
-    flutterVersionCode = '1'
-}
-
-def flutterVersionName = localProperties.getProperty('flutter.versionName')
-if (flutterVersionName == null) {
-    flutterVersionName = '1.0'
-}
-
-android {
-    namespace "com.ando.devs.the_good_alarm"
-    compileSdkVersion flutter.compileSdkVersion
-    ndkVersion flutter.ndkVersion
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = '1.8'
-    }
-
-    sourceSets {
-        main.java.srcDirs += 'src/main/kotlin'
-    }
-
-    defaultConfig {
-        applicationId "com.ando.devs.the_good_alarm"
-        minSdkVersion flutter.minSdkVersion
-        targetSdkVersion flutter.targetSdkVersion
-        versionCode flutterVersionCode.toInteger()
-        versionName flutterVersionName
-        
-        manifestPlaceholders += [
-            'foregroundServiceType': "location|mediaPlayback"
-        ]
-    }
-
-    buildTypes {
-        release {
-            signingConfig signingConfigs.debug
-        }
-    }
-
-    // lintOptions {
-    //     disable 'InvalidPackage'
-    //     checkReleaseBuilds false
-    //     abortOnError false
-    // }
-}
-
-flutter {
-    source '../..'
-}
-
-dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-}
-
---------------------------------------------------
-
-Ruta al script: android/app/src/main/AndroidManifest.xml
-Nombre del script: AndroidManifest.xml
-Contenido del script:
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-
-    <!-- Permisos -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.VIBRATE"/>
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-
-    <application
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:label="the_good_alarm">
-        <!-- tools:replace="android:foregroundServiceType"> -->
-
-        <activity
-            android:name=".MainActivity"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:exported="true"
-            android:hardwareAccelerated="true"
-            android:launchMode="singleTop"
-            android:theme="@style/LaunchTheme"
-            android:windowSoftInputMode="adjustResize">
-            
-            <meta-data
-                android:name="io.flutter.embedding.android.NormalTheme"
-                android:resource="@style/NormalTheme" />
-            
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-        </activity>
-
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
-
-        <!-- Servicios -->
-        <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:enabled="true"
-            android:exported="true"
-            android:foregroundServiceType="location|mediaPlayback"
-            android:stopWithTask="false"
-            tools:replace="android:exported"/>
-
-    </application>
-
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT"/>
-            <data android:mimeType="text/plain"/>
-        </intent>
-    </queries>
-
-</manifest>
-
---------------------------------------------------
-
-Ruta al script: android/app/src/main/kotlin/com/example/the_good_alarm/MainActivity.kt
-Nombre del script: MainActivity.kt
-Contenido del script:
-package com.ando.devs.the_good_alarm
-
-import io.flutter.embedding.android.FlutterActivity
-
-class MainActivity: FlutterActivity()
-
-
---------------------------------------------------
-
-Ruta al script: android/build.gradle
-Nombre del script: build.gradle
-Contenido del script:
-buildscript {
-    ext.kotlin_version = '1.7.10'
-    repositories {
-        google()
-        mavenCentral()
-    }
-
-    dependencies {
-        classpath 'com.android.tools.build:gradle:7.3.0'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-    }
-}
-
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-
-rootProject.buildDir = '../build'
-subprojects {
-    project.buildDir = "${rootProject.buildDir}/${project.name}"
-}
-subprojects {
-    project.evaluationDependsOn(':app')
-}
-
-tasks.register("clean", Delete) {
-    delete rootProject.buildDir
-}
-
---------------------------------------------------
-
-Ruta al script: android/gradle.properties
-Nombre del script: gradle.properties
-Contenido del script:
-org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G -XX:+HeapDumpOnOutOfMemoryError
-android.useAndroidX=true
-android.enableJetifier=true
-distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
-
-
-
---------------------------------------------------
-
-Ruta al script: android/settings.gradle
-Nombre del script: settings.gradle
-Contenido del script:
-pluginManagement {
-    def flutterSdkPath = {
-        def properties = new Properties()
-        file("local.properties").withInputStream { properties.load(it) }
-        def flutterSdkPath = properties.getProperty("flutter.sdk")
-        assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
-        return flutterSdkPath
-    }()
-
-    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
-
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-
-plugins {
-    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-    id "com.android.application" version "8.1.0" apply false
-    id "org.jetbrains.kotlin.android" version "1.8.22" apply false
-}
-
-include ":app"
-
 
 
 --------------------------------------------------

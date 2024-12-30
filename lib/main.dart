@@ -7,9 +7,12 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:the_good_alarm/configuracion/app_settings.dart';
 import 'package:the_good_alarm/configuracion/theme_provider.dart';
-import 'package:the_good_alarm/screens/home.dart';
+import 'package:the_good_alarm/screens/home_screen.dart';
 import 'package:the_good_alarm/services/alarm_service.dart';
 import 'package:logging/logging.dart';
+import 'package:the_good_alarm/services/notification_service.dart';
+import 'package:the_good_alarm/services/permission_service.dart';
+import 'package:the_good_alarm/widgets/permission_wrapper.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -55,6 +58,16 @@ void main() async {
   // Solicitar permisos
   await requestPermissions();
 
+  // Inicializar servicios
+  final permissionService = PermissionService();
+  await permissionService.resetTemporarySkip(); // Resetear el estado temporal al inicio
+
+  final notificationService = NotificationService();
+  await notificationService.initialize();
+  
+  final alarmService = AlarmService();
+  await alarmService.initialize();
+
   // Iniciar servicio en segundo plano
   await initializeService();
 
@@ -95,7 +108,8 @@ Future<void> initializeService() async {
       isForegroundMode: true,
       notificationChannelId: channel.id,
       initialNotificationTitle: channel.name,
-      initialNotificationContent: channel.description ?? 'Servicio en ejecución',
+      initialNotificationContent:
+          channel.description ?? 'Servicio en ejecución',
       foregroundServiceNotificationId: 888,
     ),
     iosConfiguration: IosConfiguration(
@@ -117,8 +131,8 @@ void onStart(ServiceInstance service) async {
 
   // Configuración del canal de notificación
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'alarm_service', 
-    'Servicio de Alarma', 
+    'alarm_service',
+    'Servicio de Alarma',
     description: 'Canal para el servicio de alarma en segundo plano',
     importance: Importance.low,
   );
@@ -137,7 +151,7 @@ void onStart(ServiceInstance service) async {
     ongoing: true,
     autoCancel: false,
   );
-  
+
   final NotificationDetails platformChannelSpecifics =
       NotificationDetails(android: androidPlatformChannelSpecifics);
 
@@ -220,13 +234,14 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-@override
+  @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AppSettings()),
         Provider<AlarmService>(create: (_) => AlarmService()),
+        Provider<PermissionService>(create: (_) => PermissionService()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
@@ -235,7 +250,9 @@ class MyApp extends StatelessWidget {
             themeMode: themeProvider.themeMode,
             theme: themeProvider.getLightTheme(),
             darkTheme: themeProvider.getDarkTheme(),
-            home: const HomeScreen(), // Cambiado de Placeholder a HomeScreen
+            home: PermissionWrapper(
+              child: HomeScreen(), // Tu pantalla principal
+            ),
           );
         },
       ),

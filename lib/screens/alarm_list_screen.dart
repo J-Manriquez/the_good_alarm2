@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:the_good_alarm/screens/vibration_settings_screen.dart';
 import '../models/alarm.dart';
 import '../services/alarm_service.dart';
 import '../widgets/alarm_list_item.dart';
@@ -56,8 +57,9 @@ class AlarmListScreen extends StatelessWidget {
               child: CircularProgressIndicator(),
             );
           }
+          final alarms = snapshot.data ?? [];
 
-          final alarms = snapshot.data!;
+          // final alarms = snapshot.data!;
           
           if (alarms.isEmpty) {
             return Center(
@@ -225,16 +227,27 @@ class AlarmListScreen extends StatelessWidget {
                   label: '${(settings.alarmVolume * 100).round()}%',
                 ),
               ),
-              // Vibración
-              ListTile(
-                title: const Text('Vibración'),
-                trailing: Switch(
-                  value: settings.vibrationEnabled,
-                  onChanged: settings.setVibrationEnabled,
-                ),
+              // botón para configuración de vibración
+            ListTile(
+              title: const Text('Configuración de Vibración'),
+              subtitle: Text(
+                settings.vibrationService.isEnabled 
+                    ? 'Activada - ${settings.vibrationService.currentPattern}'
+                    : 'Desactivada',
               ),
-            ],
-          ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const VibrationSettingsScreen(),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),

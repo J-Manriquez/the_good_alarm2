@@ -7,14 +7,18 @@ import 'notification_service.dart';
 class AlarmService {
   static final AlarmService _instance = AlarmService._internal();
   factory AlarmService() => _instance;
-  AlarmService._internal();
+  AlarmService._internal() {
+    // Añadir esto para asegurar que el stream esté inicializado
+    _initializeStream();
+  }
 
   static const String _storageKey = 'alarms';
   final NotificationService _notificationService = NotificationService();
   late SharedPreferences _prefs;
   List<Alarm> _alarms = [];
 
-  final _alarmsController = StreamController<List<Alarm>>.broadcast();
+  // Convertir a un broadcast StreamController
+  var _alarmsController = StreamController<List<Alarm>>.broadcast(sync: true);
   Stream<List<Alarm>> get alarmsStream => _alarmsController.stream;
 
   // Getter para la lista de alarmas
@@ -25,29 +29,54 @@ class AlarmService {
     await _loadAlarms();
   }
 
+  // Nuevo método para inicializar el stream
+  void _initializeStream() {
+    if (_alarmsController.isClosed) {
+      _alarmsController = StreamController<List<Alarm>>.broadcast(sync: true);
+    }
+  }
+
   void _notifyListeners() {
-    _alarmsController.add(_alarms);
+    if (!_alarmsController.isClosed) {
+      _alarmsController.add(List.unmodifiable(_alarms));
+    }
   }
 
   Future<void> _loadAlarms() async {
-    final String? alarmsJson = _prefs.getString(_storageKey);
-    if (alarmsJson != null) {
-      final List<dynamic> alarmsList = jsonDecode(alarmsJson);
-      _alarms = alarmsList.map((json) => Alarm.fromJson(json)).toList();
+    try {
+      final String? alarmsJson = _prefs.getString(_storageKey);
+      if (alarmsJson != null) {
+        final List<dynamic> alarmsList = jsonDecode(alarmsJson);
+        _alarms = alarmsList.map((json) => Alarm.fromJson(json)).toList();
 
-      // Reprogramar alarmas activas
-      for (final alarm in _alarms) {
-        if (alarm.isEnabled) {
-          await _notificationService.scheduleAlarm(alarm);
+        // Reprogramar alarmas activas
+        for (final alarm in _alarms) {
+          if (alarm.isEnabled) {
+            await _notificationService.scheduleAlarm(alarm);
+          }
         }
+      } else {
+        _alarms = [];
       }
+
+      // Añadir esto para asegurar que el stream se actualice
+      _notifyListeners();
+    } catch (e) {
+      print('Error al cargar alarmas: $e');
+      _alarms = [];
+      _notifyListeners();
     }
   }
 
   Future<void> _saveAlarms() async {
-    final String alarmsJson =
-        jsonEncode(_alarms.map((a) => a.toJson()).toList());
-    await _prefs.setString(_storageKey, alarmsJson);
+    try {
+      final String alarmsJson =
+          jsonEncode(_alarms.map((a) => a.toJson()).toList());
+      await _prefs.setString(_storageKey, alarmsJson);
+      _notifyListeners();
+    } catch (e) {
+      print('Error al guardar alarmas: $e');
+    }
   }
 
   Future<void> addAlarm(Alarm alarm) async {
@@ -56,19 +85,17 @@ class AlarmService {
       await _notificationService.scheduleAlarm(alarm);
     }
     await _saveAlarms();
-    _notifyListeners();  
   }
 
   Future<void> updateAlarm(Alarm alarm) async {
     final index = _alarms.indexWhere((a) => a.id == alarm.id);
     if (index != -1) {
-      await _notificationService.cancelAlarm(alarm.id);
+      await _notificationService.cancelAlarm(_alarms[index].id);
       _alarms[index] = alarm;
       if (alarm.isEnabled) {
         await _notificationService.scheduleAlarm(alarm);
       }
       await _saveAlarms();
-      _notifyListeners();  
     }
   }
 
@@ -76,18 +103,21 @@ class AlarmService {
     await _notificationService.cancelAlarm(alarmId);
     _alarms.removeWhere((a) => a.id == alarmId);
     await _saveAlarms();
-    _notifyListeners();  
   }
 
   Future<void> toggleAlarm(String alarmId) async {
     final index = _alarms.indexWhere((a) => a.id == alarmId);
     if (index != -1) {
-      _alarms[index].toggleEnabled();
+      _alarms[index] = _alarms[index].copyWith(
+        isEnabled: !_alarms[index].isEnabled,
+      );
+
       if (_alarms[index].isEnabled) {
         await _notificationService.scheduleAlarm(_alarms[index]);
       } else {
         await _notificationService.cancelAlarm(alarmId);
       }
+
       await _saveAlarms();
     }
   }
@@ -112,7 +142,7 @@ class AlarmService {
       await _notificationService.scheduleAlarm(alarm);
     }
     await _saveAlarms();
-    _notifyListeners();  
+    _notifyListeners();
   }
 
   List<Alarm> getActiveAlarms() {
@@ -124,4 +154,9 @@ class AlarmService {
         .where((alarm) => alarm.isEnabled && alarm.shouldRingOn(date))
         .toList();
   }
+
+   void dispose() {
+    _alarmsController.close();
+  }
+
 }
