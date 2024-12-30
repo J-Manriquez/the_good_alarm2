@@ -145,28 +145,42 @@ Nombre del script: AndroidManifest.xml
 Contenido del script:
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.ando.devs.the_good_alarm">
 
-    <!-- Permisos -->
+    <!-- Permisos de Internet -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
+    <!-- Permisos de Servicio en Primer Plano -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.VIBRATE"/>
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+
+    <!-- Permisos de Alarma -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
+    <!-- Permisos de Notificación -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/> 
+
+    <!-- Permisos de Vibración -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
+
+    <!-- Permisos de Ubicación -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:label="the_good_alarm">
-        <!-- tools:replace="android:foregroundServiceType"> -->
+        android:label="the_good_alarm"
+        android:enableOnBackInvokedCallback="true"
+        tools:targetApi="tiramisu">
 
         <activity
             android:name=".MainActivity"
@@ -191,7 +205,6 @@ Contenido del script:
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- Servicios -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:enabled="true"
@@ -201,14 +214,6 @@ Contenido del script:
             tools:replace="android:exported"/>
 
     </application>
-
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT"/>
-            <data android:mimeType="text/plain"/>
-        </intent>
-    </queries>
-
 </manifest>
 
 --------------------------------------------------
@@ -3388,7 +3393,6 @@ class NotificationService {
 Ruta al script: lib/services/permission_service.dart
 Nombre del script: permission_service.dart
 Contenido del script:
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -3398,64 +3402,57 @@ class PermissionService {
   factory PermissionService() => _instance;
   PermissionService._internal();
 
-  // Clave para SharedPreferences
   static const String _tempSkipPermissionsKey = 'temp_skip_permissions';
 
-  // Separar permisos por categorías
   final List<Permission> _criticalPermissions = [
     Permission.notification,
-    Permission.systemAlertWindow,
-  ];
-
-  final List<Permission> _optimizationPermissions = [
-    Permission.ignoreBatteryOptimizations,
-    Permission.accessNotificationPolicy,
-  ];
-
-  final List<Permission> _optionalPermissions = [
     Permission.scheduleExactAlarm,
   ];
 
-  // Estado de los permisos
+  final List<Permission> _backgroundPermissions = [
+    Permission.systemAlertWindow,
+    Permission.ignoreBatteryOptimizations,
+  ];
+
+  final List<Permission> _locationPermissions = [
+    Permission.location,
+    Permission.locationAlways,
+    Permission.locationWhenInUse,
+  ];
+
   final Map<Permission, bool> _permissionStatus = {};
   bool _temporarilySkipped = false;
 
-  // Stream para notificar cambios en los permisos
-  final _permissionController = StreamController<Map<Permission, bool>>.broadcast();
-  Stream<Map<Permission, bool>> get permissionStream => _permissionController.stream;
-
-  // Verificar permisos al iniciar
   Future<bool> checkInitialPermissions() async {
-    // Verificar si los permisos están temporalmente ignorados
     final prefs = await SharedPreferences.getInstance();
     _temporarilySkipped = prefs.getBool(_tempSkipPermissionsKey) ?? false;
 
-    bool allCriticalGranted = true;
-    
     // Verificar permisos críticos
     for (var permission in _criticalPermissions) {
       final status = await permission.status;
       _permissionStatus[permission] = status.isGranted;
-      if (!status.isGranted) {
-        allCriticalGranted = false;
-      }
     }
 
-    // Verificar permisos de optimización
-    for (var permission in _optimizationPermissions) {
+    // Verificar permisos de segundo plano
+    for (var permission in _backgroundPermissions) {
       final status = await permission.status;
       _permissionStatus[permission] = status.isGranted;
     }
 
-    _permissionController.add(_permissionStatus);
-    return allCriticalGranted || _temporarilySkipped;
+    // Verificar permisos de ubicación
+    for (var permission in _locationPermissions) {
+      final status = await permission.status;
+      _permissionStatus[permission] = status.isGranted;
+    }
+
+    return _criticalPermissions.every((p) => 
+        _permissionStatus[p] == true) || _temporarilySkipped;
   }
 
   Future<void> temporarilySkipPermissions() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_tempSkipPermissionsKey, true);
     _temporarilySkipped = true;
-    _permissionController.add(_permissionStatus);
   }
 
   Future<void> resetTemporarySkip() async {
@@ -3465,28 +3462,28 @@ class PermissionService {
   }
 
   // Solicitar permisos críticos y mostrar diálogo para optimizaciones
+  
   Future<bool> requestRequiredPermissions(BuildContext context) async {
-    // Primero solicitar permisos críticos
-    bool allCriticalGranted = true;
+    bool allGranted = true;
+
+    // Solicitar permisos críticos
     for (var permission in _criticalPermissions) {
-      if (!await permission.isGranted) {
-        final status = await permission.request();
-        _permissionStatus[permission] = status.isGranted;
-        if (!status.isGranted) {
-          allCriticalGranted = false;
-        }
-      } else {
-        _permissionStatus[permission] = true;
-      }
+      final status = await permission.request();
+      _permissionStatus[permission] = status.isGranted;
+      if (!status.isGranted) allGranted = false;
     }
 
-    // Si los permisos críticos están concedidos, mostrar diálogo para optimizaciones
-    if (allCriticalGranted && context.mounted) {
-      await _showOptimizationDialog(context);
+    // Solicitar permisos de segundo plano
+    for (var permission in _backgroundPermissions) {
+      await permission.request();
     }
 
-    _permissionController.add(_permissionStatus);
-    return allCriticalGranted;
+    // Solicitar permisos de ubicación
+    for (var permission in _locationPermissions) {
+      await permission.request();
+    }
+
+    return allGranted;
   }
 
   Future<void> _showOptimizationDialog(BuildContext context) async {
@@ -3589,9 +3586,7 @@ class PermissionService {
     return _permissionStatus[permission] ?? false;
   }
 
-  void dispose() {
-    _permissionController.close();
-  }
+
 }
 
 --------------------------------------------------
@@ -4867,7 +4862,6 @@ Ruta al script: lib/widgets/permission_wrapper.dart
 Nombre del script: permission_wrapper.dart
 Contenido del script:
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../services/permission_service.dart';
 
 class PermissionWrapper extends StatefulWidget {
@@ -5057,11 +5051,15 @@ void main() async {
   runApp(const MyApp());
 }
 
+
 Future<void> requestPermissions() async {
-  await Permission.notification.request();
-  await Permission.systemAlertWindow.request();
-  await Permission.locationWhenInUse.request();
-  await Permission.locationAlways.request();
+  // Solicitar los permisos principales
+  await [
+    Permission.notification,
+    Permission.scheduleExactAlarm,
+    Permission.systemAlertWindow,
+    Permission.location,
+  ].request();
 }
 
 Future<void> initializeService() async {

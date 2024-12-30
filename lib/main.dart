@@ -74,11 +74,15 @@ void main() async {
   runApp(const MyApp());
 }
 
+
 Future<void> requestPermissions() async {
-  await Permission.notification.request();
-  await Permission.systemAlertWindow.request();
-  await Permission.locationWhenInUse.request();
-  await Permission.locationAlways.request();
+  // Solicitar los permisos principales
+  await [
+    Permission.notification,
+    Permission.scheduleExactAlarm,
+    Permission.systemAlertWindow,
+    Permission.location,
+  ].request();
 }
 
 Future<void> initializeService() async {

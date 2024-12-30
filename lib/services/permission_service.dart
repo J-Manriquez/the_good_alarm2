@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,64 +7,57 @@ class PermissionService {
   factory PermissionService() => _instance;
   PermissionService._internal();
 
-  // Clave para SharedPreferences
   static const String _tempSkipPermissionsKey = 'temp_skip_permissions';
 
-  // Separar permisos por categorías
   final List<Permission> _criticalPermissions = [
     Permission.notification,
-    Permission.systemAlertWindow,
-  ];
-
-  final List<Permission> _optimizationPermissions = [
-    Permission.ignoreBatteryOptimizations,
-    Permission.accessNotificationPolicy,
-  ];
-
-  final List<Permission> _optionalPermissions = [
     Permission.scheduleExactAlarm,
   ];
 
-  // Estado de los permisos
+  final List<Permission> _backgroundPermissions = [
+    Permission.systemAlertWindow,
+    Permission.ignoreBatteryOptimizations,
+  ];
+
+  final List<Permission> _locationPermissions = [
+    Permission.location,
+    Permission.locationAlways,
+    Permission.locationWhenInUse,
+  ];
+
   final Map<Permission, bool> _permissionStatus = {};
   bool _temporarilySkipped = false;
 
-  // Stream para notificar cambios en los permisos
-  final _permissionController = StreamController<Map<Permission, bool>>.broadcast();
-  Stream<Map<Permission, bool>> get permissionStream => _permissionController.stream;
-
-  // Verificar permisos al iniciar
   Future<bool> checkInitialPermissions() async {
-    // Verificar si los permisos están temporalmente ignorados
     final prefs = await SharedPreferences.getInstance();
     _temporarilySkipped = prefs.getBool(_tempSkipPermissionsKey) ?? false;
 
-    bool allCriticalGranted = true;
-    
     // Verificar permisos críticos
     for (var permission in _criticalPermissions) {
       final status = await permission.status;
       _permissionStatus[permission] = status.isGranted;
-      if (!status.isGranted) {
-        allCriticalGranted = false;
-      }
     }
 
-    // Verificar permisos de optimización
-    for (var permission in _optimizationPermissions) {
+    // Verificar permisos de segundo plano
+    for (var permission in _backgroundPermissions) {
       final status = await permission.status;
       _permissionStatus[permission] = status.isGranted;
     }
 
-    _permissionController.add(_permissionStatus);
-    return allCriticalGranted || _temporarilySkipped;
+    // Verificar permisos de ubicación
+    for (var permission in _locationPermissions) {
+      final status = await permission.status;
+      _permissionStatus[permission] = status.isGranted;
+    }
+
+    return _criticalPermissions.every((p) => 
+        _permissionStatus[p] == true) || _temporarilySkipped;
   }
 
   Future<void> temporarilySkipPermissions() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_tempSkipPermissionsKey, true);
     _temporarilySkipped = true;
-    _permissionController.add(_permissionStatus);
   }
 
   Future<void> resetTemporarySkip() async {
@@ -75,28 +67,28 @@ class PermissionService {
   }
 
   // Solicitar permisos críticos y mostrar diálogo para optimizaciones
+  
   Future<bool> requestRequiredPermissions(BuildContext context) async {
-    // Primero solicitar permisos críticos
-    bool allCriticalGranted = true;
+    bool allGranted = true;
+
+    // Solicitar permisos críticos
     for (var permission in _criticalPermissions) {
-      if (!await permission.isGranted) {
-        final status = await permission.request();
-        _permissionStatus[permission] = status.isGranted;
-        if (!status.isGranted) {
-          allCriticalGranted = false;
-        }
-      } else {
-        _permissionStatus[permission] = true;
-      }
+      final status = await permission.request();
+      _permissionStatus[permission] = status.isGranted;
+      if (!status.isGranted) allGranted = false;
     }
 
-    // Si los permisos críticos están concedidos, mostrar diálogo para optimizaciones
-    if (allCriticalGranted && context.mounted) {
-      await _showOptimizationDialog(context);
+    // Solicitar permisos de segundo plano
+    for (var permission in _backgroundPermissions) {
+      await permission.request();
     }
 
-    _permissionController.add(_permissionStatus);
-    return allCriticalGranted;
+    // Solicitar permisos de ubicación
+    for (var permission in _locationPermissions) {
+      await permission.request();
+    }
+
+    return allGranted;
   }
 
   Future<void> _showOptimizationDialog(BuildContext context) async {
@@ -199,7 +191,5 @@ class PermissionService {
     return _permissionStatus[permission] ?? false;
   }
 
-  void dispose() {
-    _permissionController.close();
-  }
+
 }
