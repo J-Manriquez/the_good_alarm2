@@ -20,6 +20,39 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  late ScrollController _scrollController;
+  double _titleOpacity = 0.0;
+  double _expandedInfoOpacity = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController()
+      ..addListener(() {
+        // Calcular las opacidades basadas en el scroll
+        final double expandedHeight =
+            200.0; // Altura expandida del SliverAppBar
+        final double scrollPosition = _scrollController.offset;
+        final double appBarHeight = kToolbarHeight;
+
+        setState(() {
+          // Calcular opacidad del título (visible cuando está contraído)
+          _titleOpacity = (scrollPosition / (expandedHeight - appBarHeight))
+              .clamp(0.0, 1.0);
+          // Calcular opacidad de la información expandida
+          _expandedInfoOpacity =
+              (1 - (scrollPosition / (expandedHeight - appBarHeight)))
+                  .clamp(0.0, 1.0);
+        });
+      });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final alarmService = Provider.of<AlarmService>(context);
@@ -27,19 +60,24 @@ class _HomeScreenState extends State<HomeScreen> {
     final appSettings = Provider.of<AppSettings>(context);
 
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await alarmService.initialize();
-        },
-        child: CustomScrollView(
-          slivers: [
-            SliverAppBar(
-              expandedHeight: 200.0,
-              floating: false,
-              pinned: true,
-              snap: false,
-              flexibleSpace: FlexibleSpaceBar(
-                background: Container(
+      body: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 200.0,
+            floating: false,
+            pinned: true,
+            snap: false,
+            title: AnimatedOpacity(
+              opacity: _titleOpacity,
+              duration: const Duration(milliseconds: 300),
+              child: _buildCollapsedTitle(alarmService),
+            ),
+            flexibleSpace: FlexibleSpaceBar(
+              background: AnimatedOpacity(
+                opacity: _expandedInfoOpacity,
+                duration: const Duration(milliseconds: 300),
+                child: Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
@@ -50,66 +88,102 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                  child: Center(
+                  child: SafeArea(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const SizedBox(height: 40),
+                        const SizedBox(
+                            height:
+                                kToolbarHeight), // Espacio para la barra de título
                         _buildNextAlarmInfo(context, alarmService),
                       ],
                     ),
                   ),
                 ),
               ),
-              actions: [
-                IconButton(
-                  icon: Icon(
-                    themeProvider.themeMode == ThemeMode.dark
-                        ? Icons.light_mode
-                        : Icons.dark_mode,
-                  ),
-                  onPressed: () {
-                    themeProvider.setThemeMode(
-                      themeProvider.themeMode == ThemeMode.dark
-                          ? ThemeMode.light
-                          : ThemeMode.dark,
-                    );
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.settings),
-                  onPressed: () => _showSettingsDialog(context, appSettings),
-                ),
-              ],
             ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildQuickActions(context),
-                    const SizedBox(height: 24),
-                    // Añadir la sección de historial diario
-                    Center(
+            actions: [
+              IconButton(
+                icon: Icon(
+                  themeProvider.themeMode == ThemeMode.dark
+                      ? Icons.light_mode
+                      : Icons.dark_mode,
+                ),
+                onPressed: () {
+                  themeProvider.setThemeMode(
+                    themeProvider.themeMode == ThemeMode.dark
+                        ? ThemeMode.light
+                        : ThemeMode.dark,
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () => _showSettingsDialog(context, appSettings),
+              ),
+            ],
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildQuickActions(context),
+                  const SizedBox(height: 24),
+                  // Añadir la sección de historial diario
+                  Center(
                     child: Text('Historial Diario',
                         style: Theme.of(context).textTheme.titleMedium),
-                    ),
-                    const SizedBox(height: 8),
-                    // Añadir la sección de historial diario')
-                    _buildDailyHistory(context),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Añadir la sección de historial diario')
+                  _buildDailyHistory(context),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _createAlarm(context),
         icon: const Icon(Icons.add),
         label: const Text('Nueva Alarma'),
       ),
+    );
+  }
+
+  Widget _buildCollapsedTitle(AlarmService alarmService) {
+    return StreamBuilder<List<Alarm>>(
+      stream: alarmService.alarmsStream,
+      initialData: alarmService.alarms,
+      builder: (context, snapshot) {
+        final nextAlarm = _findNextAlarm(snapshot.data ?? []);
+        if (nextAlarm == null) {
+          return const Text('No hay alarmas');
+        }
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _formatTime(nextAlarm.time),
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _getTimeUntilAlarm(nextAlarm),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -130,9 +204,8 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        // Sin datos o sin alarmas
-        final allAlarms = snapshot.data ?? [];
-        final activeAlarms = allAlarms.where((a) => a.isEnabled).toList();
+        final activeAlarms =
+            (snapshot.data ?? []).where((alarm) => alarm.isEnabled).toList();
 
         if (activeAlarms.isEmpty) {
           return const Text(
@@ -156,6 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -200,7 +274,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   'Ver todas las alarmas activas',
                   style: TextStyle(
                     color: Colors.white,
-                    decoration: TextDecoration.underline,
                   ),
                 ),
               ),
@@ -212,62 +285,61 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildQuickActions(BuildContext context) {
     return Card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildQuickActionButton(
-                  context,
-                  'Hoy',
-                  Icons.today,
-                  () {
-                    final today = DateTime.now();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => DayAlarmsScreen(
-                          selectedDate: today,
-                          screenTitle: 'Alarmas de Hoy',
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                _buildQuickActionButton(
-                  context,
-                  'Mañana',
-                  Icons.calendar_today,
-                  () {
-                    final tomorrow =
-                        DateTime.now().add(const Duration(days: 1));
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => DayAlarmsScreen(
-                          selectedDate: tomorrow,
-                          screenTitle: 'Alarmas de Mañana',
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                _buildQuickActionButton(
-                  context,
-                  'Todas',
-                  Icons.list,
-                  () => Navigator.push(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildQuickActionButton(
+                context,
+                'Hoy',
+                Icons.today,
+                () {
+                  final today = DateTime.now();
+                  Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const AlarmListScreen(),
+                      builder: (context) => DayAlarmsScreen(
+                        selectedDate: today,
+                        screenTitle: 'Alarmas de Hoy',
+                      ),
                     ),
+                  );
+                },
+              ),
+              _buildQuickActionButton(
+                context,
+                'Mañana',
+                Icons.calendar_today,
+                () {
+                  final tomorrow = DateTime.now().add(const Duration(days: 1));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => DayAlarmsScreen(
+                        selectedDate: tomorrow,
+                        screenTitle: 'Alarmas de Mañana',
+                      ),
+                    ),
+                  );
+                },
+              ),
+              _buildQuickActionButton(
+                context,
+                'Todas',
+                Icons.list,
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AlarmListScreen(),
                   ),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -428,13 +500,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Alarm? _findNextAlarm(List<Alarm> alarms) {
     if (alarms.isEmpty) return null;
 
-    alarms.sort((a, b) {
+    // Crear una copia mutable de la lista
+    final mutableAlarms = List<Alarm>.from(alarms);
+
+    mutableAlarms.sort((a, b) {
       final aNext = a.getNextAlarmTime();
       final bNext = b.getNextAlarmTime();
       return aNext.compareTo(bNext);
     });
 
-    return alarms.first;
+    return mutableAlarms.first;
   }
 
   String _formatTime(DateTime time) {
@@ -520,66 +595,82 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showSettingsDialog(BuildContext context, AppSettings settings) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Configuración'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              title: const Text('Formato de hora'),
-              subtitle: Text(
-                settings.timeFormat == TimeFormat.h24 ? '24 horas' : '12 horas',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Configuración'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                title: const Text('Formato de hora'),
+                subtitle: Text(
+                  settings.timeFormat == TimeFormat.h24
+                      ? '24 horas'
+                      : '12 horas',
+                ),
+                trailing: Switch(
+                  value: settings.timeFormat == TimeFormat.h24,
+                  onChanged: (value) {
+                    setState(() {
+                      settings.setTimeFormat(
+                        value ? TimeFormat.h24 : TimeFormat.h12,
+                      );
+                    });
+                  },
+                ),
               ),
-              trailing: Switch(
-                value: settings.timeFormat == TimeFormat.h24,
-                onChanged: (value) {
-                  settings.setTimeFormat(
-                    value ? TimeFormat.h24 : TimeFormat.h12,
-                  );
-                },
+              ListTile(
+                title: const Text('Método de entrada'),
+                subtitle: Text(
+                  settings.inputFormat == InputFormat.numpad
+                      ? 'Teclado numérico'
+                      : 'Selector circular',
+                ),
+                trailing: Switch(
+                  value: settings.inputFormat == InputFormat.numpad,
+                  onChanged: (value) {
+                    setState(() {
+                      settings.setInputFormat(
+                        value ? InputFormat.numpad : InputFormat.circular,
+                      );
+                    });
+                  },
+                ),
               ),
-            ),
-            ListTile(
-              title: const Text('Método de entrada'),
-              subtitle: Text(
-                settings.inputFormat == InputFormat.numpad
-                    ? 'Teclado numérico'
-                    : 'Selector circular',
+              ListTile(
+                title: const Text('Volumen de alarma'),
+                subtitle: Slider(
+                  value: settings.alarmVolume,
+                  onChanged: (value) {
+                    setState(() {
+                      settings.setAlarmVolume(value);
+                    });
+                  },
+                  divisions: 10,
+                  label: '${(settings.alarmVolume * 100).round()}%',
+                ),
               ),
-              trailing: Switch(
-                value: settings.inputFormat == InputFormat.numpad,
-                onChanged: (value) {
-                  settings.setInputFormat(
-                    value ? InputFormat.numpad : InputFormat.circular,
-                  );
-                },
+              ListTile(
+                title: const Text('Vibración'),
+                trailing: Switch(
+                  value: settings.vibrationEnabled,
+                  onChanged: (value) {
+                    setState(() {
+                      settings.setVibrationEnabled(value);
+                    });
+                  },
+                ),
               ),
-            ),
-            ListTile(
-              title: const Text('Volumen de alarma'),
-              subtitle: Slider(
-                value: settings.alarmVolume,
-                onChanged: settings.setAlarmVolume,
-                divisions: 10,
-                label: '${(settings.alarmVolume * 100).round()}%',
-              ),
-            ),
-            ListTile(
-              title: const Text('Vibración'),
-              trailing: Switch(
-                value: settings.vibrationEnabled,
-                onChanged: settings.setVibrationEnabled,
-              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cerrar'),
-          ),
-        ],
       ),
     );
   }

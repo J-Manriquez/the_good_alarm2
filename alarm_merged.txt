@@ -201,8 +201,6 @@ Nombre del script: alarm_list_screen.dart
 Contenido del script:
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:the_good_alarm/configuracion/app_settings.dart';
-import 'package:the_good_alarm/screens/vibration_settings_screen.dart';
 import 'package:the_good_alarm/widgets/intervalos.dart';
 import '../models/time_interval_settings.dart';
 import '../services/alarm_service.dart';
@@ -259,7 +257,7 @@ class _AlarmListScreenState extends State<AlarmListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final alarmService = Provider.of<AlarmService>(context);
+    final alarmService = Provider.of<AlarmService>(context, listen: false);
 
     return Scaffold(
       appBar: AppBar(
@@ -273,12 +271,14 @@ class _AlarmListScreenState extends State<AlarmListScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          final alarmService =
-              Provider.of<AlarmService>(context, listen: false);
           await alarmService.initialize();
         },
-        child: Consumer<AlarmService>(
-          builder: (context, alarmService, child) {
+        child: StreamBuilder<List<Alarm>>(
+          stream: alarmService.alarmsStream,
+          initialData: alarmService.alarms,
+          builder: (context, snapshot) {
+        // child: Consumer<AlarmService>(
+          // builder: (context, alarmService, child) {
             final alarms = alarmService.alarms;
             final morningAlarms = _filterAlarmsByInterval(alarms,
                 _intervalSettings.morningStart, _intervalSettings.morningEnd);
@@ -479,135 +479,6 @@ class _AlarmListScreenState extends State<AlarmListScreen> {
         );
       },
     );
-  }
-
-  Future<void> _deleteAlarm(BuildContext context, Alarm alarm) async {
-    final alarmService = Provider.of<AlarmService>(context, listen: false);
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar Alarma'),
-        content:
-            const Text('¿Estás seguro de que quieres eliminar esta alarma?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await alarmService.deleteAlarm(alarm.id);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Alarma eliminada'),
-          ),
-        );
-      }
-    }
-  }
-
-  void _createAlarm(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AlarmEditScreen(),
-      ),
-    );
-  }
-
-  VoidCallback _showSettingsDialog(BuildContext context, AppSettings settings) {
-    return () {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Configuración'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Formato de hora
-              ListTile(
-                title: const Text('Formato de hora'),
-                subtitle: Text(
-                  settings.timeFormat == TimeFormat.h24
-                      ? '24 horas'
-                      : '12 horas',
-                ),
-                trailing: Switch(
-                  value: settings.timeFormat == TimeFormat.h24,
-                  onChanged: (value) {
-                    settings.setTimeFormat(
-                      value ? TimeFormat.h24 : TimeFormat.h12,
-                    );
-                  },
-                ),
-              ),
-              // Formato de entrada
-              ListTile(
-                title: const Text('Método de entrada'),
-                subtitle: Text(
-                  settings.inputFormat == InputFormat.numpad
-                      ? 'Teclado numérico'
-                      : 'Selector circular',
-                ),
-                trailing: Switch(
-                  value: settings.inputFormat == InputFormat.numpad,
-                  onChanged: (value) {
-                    settings.setInputFormat(
-                      value ? InputFormat.numpad : InputFormat.circular,
-                    );
-                  },
-                ),
-              ),
-              // Volumen de alarma
-              ListTile(
-                title: const Text('Volumen de alarma'),
-                subtitle: Slider(
-                  value: settings.alarmVolume,
-                  onChanged: settings.setAlarmVolume,
-                  divisions: 10,
-                  label: '${(settings.alarmVolume * 100).round()}%',
-                ),
-              ),
-              // botón para configuración de vibración
-              ListTile(
-                title: const Text('Configuración de Vibración'),
-                subtitle: Text(
-                  settings.vibrationService.isEnabled
-                      ? 'Activada - ${settings.vibrationService.currentPattern}'
-                      : 'Desactivada',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const VibrationSettingsScreen(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cerrar'),
-            ),
-          ],
-        ),
-      );
-    };
   }
 }
 
