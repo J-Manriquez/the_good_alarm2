@@ -117,6 +117,7 @@ android {
         ]
     }
 
+
     buildTypes {
         release {
             signingConfig signingConfigs.debug
@@ -487,6 +488,9 @@ class Alarm {
   String? gameDifficulty; // 'easy', 'medium', 'hard'
   bool requireGame;
   final bool useVibration;
+  int totalTimesTriggered;
+  int totalTimesStopped;
+  int totalTimesSnoozed;
   
   Alarm({
     required this.id,
@@ -502,6 +506,9 @@ class Alarm {
     this.gameDifficulty,
     this.requireGame = false,
     this.useVibration = true,
+    this.totalTimesTriggered = 0,
+    this.totalTimesStopped = 0,
+    this.totalTimesSnoozed = 0,
   }) : weekDays = weekDays ?? List.filled(7, false);
 
   // Copia del objeto con posibles modificaciones
@@ -552,6 +559,9 @@ class Alarm {
       'gameDifficulty': gameDifficulty,
       'requireGame': requireGame,
       'useVibration': useVibration,
+      'totalTimesTriggered': totalTimesTriggered,
+      'totalTimesStopped': totalTimesStopped,
+      'totalTimesSnoozed': totalTimesSnoozed,
     };
   }
 
@@ -571,6 +581,9 @@ class Alarm {
       gameDifficulty: json['gameDifficulty'],
       requireGame: json['requireGame'],
       useVibration: json['useVibration'] ?? true,
+      totalTimesTriggered: json['totalTimesTriggered'] ?? 0,
+      totalTimesStopped: json['totalTimesStopped'] ?? 0,
+      totalTimesSnoozed: json['totalTimesSnoozed'] ?? 0,
     );
   }
 
@@ -1770,126 +1783,260 @@ Nombre del script: alarm_list_screen.dart
 Contenido del script:
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:the_good_alarm/configuracion/app_settings.dart';
 import 'package:the_good_alarm/screens/vibration_settings_screen.dart';
-import '../models/alarm.dart';
+import 'package:the_good_alarm/widgets/intervalos.dart';
+import '../models/time_interval_settings.dart';
 import '../services/alarm_service.dart';
-import '../widgets/alarm_list_item.dart';
+import '../models/alarm.dart';
 import 'alarm_edit_screen.dart';
-import '../configuracion/theme_provider.dart';
-import '../configuracion/app_settings.dart';
 
-class AlarmListScreen extends StatelessWidget {
+class AlarmListScreen extends StatefulWidget {
   const AlarmListScreen({super.key});
+
+  @override
+  State<AlarmListScreen> createState() => _AlarmListScreenState();
+}
+
+class _AlarmListScreenState extends State<AlarmListScreen> {
+  late TimeIntervalSettings _intervalSettings;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIntervalSettings();
+  }
+
+  Future<void> _loadIntervalSettings() async {
+    final settings = await TimeIntervalSettings.load();
+    setState(() {
+      _intervalSettings = settings;
+    });
+  }
+
+  String _formatTimeOfDay(TimeOfDay time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  List<Alarm> _filterAlarmsByInterval(
+      List<Alarm> alarms, TimeOfDay start, TimeOfDay end) {
+    return alarms.where((alarm) {
+      final alarmTime = TimeOfDay.fromDateTime(alarm.time);
+      return _isTimeInInterval(alarmTime, start, end);
+    }).toList();
+  }
+
+  bool _isTimeInInterval(TimeOfDay time, TimeOfDay start, TimeOfDay end) {
+    final startMinutes = start.hour * 60 + start.minute;
+    final endMinutes = end.hour * 60 + end.minute;
+    final timeMinutes = time.hour * 60 + time.minute;
+
+    // Manejar caso de intervalo que cruza la media noche
+    if (endMinutes < startMinutes) {
+      return timeMinutes >= startMinutes || timeMinutes <= endMinutes;
+    }
+
+    return timeMinutes >= startMinutes && timeMinutes <= endMinutes;
+  }
 
   @override
   Widget build(BuildContext context) {
     final alarmService = Provider.of<AlarmService>(context);
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final appSettings = Provider.of<AppSettings>(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Alarmas'),
+        title: const Text('Todas las Alarmas'),
         actions: [
-          // Botón para cambiar el tema
-          IconButton(
-            icon: Icon(
-              themeProvider.themeMode == ThemeMode.dark
-                  ? Icons.light_mode
-                  : Icons.dark_mode,
-            ),
-            onPressed: () {
-              themeProvider.setThemeMode(
-                themeProvider.themeMode == ThemeMode.dark
-                    ? ThemeMode.light
-                    : ThemeMode.dark,
-              );
-            },
-          ),
-          // Botón de configuración
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: _showSettingsDialog(context, appSettings),
+            onPressed: _showIntervalConfigModal,
           ),
         ],
       ),
-      body: StreamBuilder<List<Alarm>>(
-        stream: alarmService.alarmsStream,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Error: ${snapshot.error}'),
-            );
-          }
+      body: RefreshIndicator(
+        onRefresh: () async {
+          final alarmService =
+              Provider.of<AlarmService>(context, listen: false);
+          await alarmService.initialize();
+        },
+        child: Consumer<AlarmService>(
+          builder: (context, alarmService, child) {
+            final alarms = alarmService.alarms;
+            final morningAlarms = _filterAlarmsByInterval(alarms,
+                _intervalSettings.morningStart, _intervalSettings.morningEnd);
+            final afternoonAlarms = _filterAlarmsByInterval(
+                alarms,
+                _intervalSettings.afternoonStart,
+                _intervalSettings.afternoonEnd);
+            final nightAlarms = _filterAlarmsByInterval(alarms,
+                _intervalSettings.nightStart, _intervalSettings.nightEnd);
 
-          if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-          final alarms = snapshot.data ?? [];
-
-          // final alarms = snapshot.data!;
-          
-          if (alarms.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.alarm_off,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No hay alarmas configuradas',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Toca el botón + para crear una alarma',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                        ),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: alarms.length,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemBuilder: (context, index) {
-              final alarm = alarms[index];
-              return Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                child: AlarmListItem(
-                  alarm: alarm,
-                  onTap: () => _editAlarm(context, alarm),
-                  onToggle: (enabled) => _toggleAlarm(context, alarm),
-                  onDelete: () => _deleteAlarm(context, alarm),
+            // Verificar si no hay alarmas en absoluto
+            if (alarms.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.alarm_off,
+                      size: 64,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.5),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No hay alarmas',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Crea tu primera alarma',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
                 ),
               );
-            },
-          );
-        },
+            }
+
+            return ListView(
+              children: [
+                _buildAlarmSection('Mañana', morningAlarms,
+                    '${_formatTimeOfDay(_intervalSettings.morningStart)} - ${_formatTimeOfDay(_intervalSettings.morningEnd)}'),
+                _buildAlarmSection('Tarde', afternoonAlarms,
+                    '${_formatTimeOfDay(_intervalSettings.afternoonStart)} - ${_formatTimeOfDay(_intervalSettings.afternoonEnd)}'),
+                _buildAlarmSection('Noche', nightAlarms,
+                    '${_formatTimeOfDay(_intervalSettings.nightStart)} - ${_formatTimeOfDay(_intervalSettings.nightEnd)}'),
+              ],
+            );
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _createAlarm(context),
+        onPressed: () => _navigateToAlarmEdit(context),
         icon: const Icon(Icons.add),
         label: const Text('Nueva Alarma'),
       ),
     );
   }
 
-  void _editAlarm(BuildContext context, Alarm alarm) {
+  Widget _buildAlarmSection(
+      String title, List<Alarm> alarms, String timeInterval) {
+    return ExpansionTile(
+      title: Row(
+        children: [
+          Text(title),
+          const SizedBox(width: 10),
+          Text(
+            timeInterval,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.grey,
+            ),
+          ),
+        ],
+      ),
+      initiallyExpanded: true,
+      children: alarms.isEmpty
+          ? [const ListTile(title: Text('No hay alarmas'))]
+          : alarms.map((alarm) => _buildAlarmTile(alarm)).toList(),
+    );
+  }
+
+  Widget _buildAlarmTile(Alarm alarm) {
+    return ListTile(
+      title: Text(alarm.name.isEmpty ? 'Alarma' : alarm.name),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${alarm.time.hour.toString().padLeft(2, '0')}:${alarm.time.minute.toString().padLeft(2, '0')}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          Text(
+            alarm.isOneTime ? 'Una vez' : 'Repetir',
+            style: TextStyle(
+              color: alarm.isOneTime ? Colors.red : Colors.green,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+      trailing: Switch(
+        value: alarm.isEnabled,
+        onChanged: (_) => _toggleAlarm(alarm),
+      ),
+      onTap: () => _showAlarmOptions(alarm),
+    );
+  }
+
+  void _showAlarmOptions(Alarm alarm) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('Editar'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _navigateToAlarmEdit(context, alarm);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete),
+                title: const Text('Eliminar'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeleteAlarm(alarm);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _confirmDeleteAlarm(Alarm alarm) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Eliminar Alarma'),
+          content: const Text('¿Estás seguro de eliminar esta alarma?'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancelar'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            ElevatedButton(
+              child: const Text('Eliminar'),
+              onPressed: () {
+                final alarmService =
+                    Provider.of<AlarmService>(context, listen: false);
+                alarmService.deleteAlarm(alarm.id);
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _toggleAlarm(Alarm alarm) {
+    final alarmService = Provider.of<AlarmService>(context, listen: false);
+    alarmService.toggleAlarm(alarm.id);
+  }
+
+  void _navigateToAlarmEdit(BuildContext context, [Alarm? alarm]) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1898,19 +2045,33 @@ class AlarmListScreen extends StatelessWidget {
     );
   }
 
-  void _toggleAlarm(BuildContext context, Alarm alarm) {
-    final alarmService = Provider.of<AlarmService>(context, listen: false);
-    alarmService.toggleAlarm(alarm.id);
+  void _showIntervalConfigModal() {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return IntervalConfigWidget(
+          initialSettings: _intervalSettings,
+          onSave: (settings) {
+            setState(() {
+              _intervalSettings = settings;
+            });
+            settings.save();
+            Navigator.pop(context);
+          },
+        );
+      },
+    );
   }
 
   Future<void> _deleteAlarm(BuildContext context, Alarm alarm) async {
     final alarmService = Provider.of<AlarmService>(context, listen: false);
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar Alarma'),
-        content: const Text('¿Estás seguro de que quieres eliminar esta alarma?'),
+        content:
+            const Text('¿Estás seguro de que quieres eliminar esta alarma?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -1959,7 +2120,9 @@ class AlarmListScreen extends StatelessWidget {
               ListTile(
                 title: const Text('Formato de hora'),
                 subtitle: Text(
-                  settings.timeFormat == TimeFormat.h24 ? '24 horas' : '12 horas',
+                  settings.timeFormat == TimeFormat.h24
+                      ? '24 horas'
+                      : '12 horas',
                 ),
                 trailing: Switch(
                   value: settings.timeFormat == TimeFormat.h24,
@@ -1998,26 +2161,26 @@ class AlarmListScreen extends StatelessWidget {
                 ),
               ),
               // botón para configuración de vibración
-            ListTile(
-              title: const Text('Configuración de Vibración'),
-              subtitle: Text(
-                settings.vibrationService.isEnabled 
-                    ? 'Activada - ${settings.vibrationService.currentPattern}'
-                    : 'Desactivada',
+              ListTile(
+                title: const Text('Configuración de Vibración'),
+                subtitle: Text(
+                  settings.vibrationService.isEnabled
+                      ? 'Activada - ${settings.vibrationService.currentPattern}'
+                      : 'Desactivada',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const VibrationSettingsScreen(),
+                    ),
+                  );
+                },
               ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const VibrationSettingsScreen(),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
+            ],
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -2029,6 +2192,7 @@ class AlarmListScreen extends StatelessWidget {
     };
   }
 }
+
 
 --------------------------------------------------
 
@@ -2737,15 +2901,17 @@ Nombre del script: alarm_service.dart
 Contenido del script:
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:the_good_alarm/models/alarm_history_entry.dart';
 import '../models/alarm.dart';
 import 'notification_service.dart';
+import 'package:the_good_alarm/services/alarm_history_service.dart';
 
 class AlarmService {
   static final AlarmService _instance = AlarmService._internal();
   factory AlarmService() => _instance;
   AlarmService._internal() {
-    // Añadir esto para asegurar que el stream esté inicializado
     _initializeStream();
   }
 
@@ -2754,22 +2920,37 @@ class AlarmService {
   late SharedPreferences _prefs;
   List<Alarm> _alarms = [];
 
-  // Convertir a un broadcast StreamController
-  var _alarmsController = StreamController<List<Alarm>>.broadcast(sync: true);
+  // Usar un BehaviorSubject para mantener el último estado
+  late StreamController<List<Alarm>> _alarmsController =
+      StreamController<List<Alarm>>.broadcast();
   Stream<List<Alarm>> get alarmsStream => _alarmsController.stream;
+
+  // Stream específico para alarmas activas
+  Stream<List<Alarm>> get activeAlarmsStream => alarmsStream
+      .map((allAlarms) => allAlarms.where((alarm) => alarm.isEnabled).toList());
 
   // Getter para la lista de alarmas
   List<Alarm> get alarms => List.unmodifiable(_alarms);
 
+  // Getter para alarmas activas
+  List<Alarm> get activeAlarms =>
+      _alarms.where((alarm) => alarm.isEnabled).toList();
+
+  final AlarmHistoryService _alarmHistoryService = AlarmHistoryService();
+
   Future<void> initialize() async {
-    _prefs = await SharedPreferences.getInstance();
-    await _loadAlarms();
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      await _loadAlarms();
+    } catch (e) {
+      debugPrint('Error inicializando AlarmService: $e');
+      _notifyListeners(); // Notificar incluso en caso de error
+    }
   }
 
-  // Nuevo método para inicializar el stream
   void _initializeStream() {
     if (_alarmsController.isClosed) {
-      _alarmsController = StreamController<List<Alarm>>.broadcast(sync: true);
+      _alarmsController = StreamController<List<Alarm>>.broadcast();
     }
   }
 
@@ -2796,10 +2977,9 @@ class AlarmService {
         _alarms = [];
       }
 
-      // Añadir esto para asegurar que el stream se actualice
       _notifyListeners();
     } catch (e) {
-      print('Error al cargar alarmas: $e');
+      debugPrint('Error al cargar alarmas: $e');
       _alarms = [];
       _notifyListeners();
     }
@@ -2812,12 +2992,21 @@ class AlarmService {
       await _prefs.setString(_storageKey, alarmsJson);
       _notifyListeners();
     } catch (e) {
-      print('Error al guardar alarmas: $e');
+      debugPrint('Error al guardar alarmas: $e');
     }
   }
 
   Future<void> addAlarm(Alarm alarm) async {
     _alarms.add(alarm);
+    // Registrar evento de creación
+    await _alarmHistoryService.addHistoryEntry(
+      AlarmHistoryEntry(
+        alarmId: alarm.id,
+        timestamp: DateTime.now(),
+        eventType: AlarmEventType.created,
+      ),
+    );
+
     if (alarm.isEnabled) {
       await _notificationService.scheduleAlarm(alarm);
     }
@@ -2856,6 +3045,7 @@ class AlarmService {
       }
 
       await _saveAlarms();
+      _notifyListeners();
     }
   }
 
@@ -2863,6 +3053,19 @@ class AlarmService {
     final alarm = _alarms.firstWhere((a) => a.id == alarmId);
     if (alarm.canSnooze()) {
       alarm.incrementSnoozeCount();
+      alarm.totalTimesSnoozed++;
+
+      await _alarmHistoryService.addHistoryEntry(
+        AlarmHistoryEntry(
+          alarmId: alarmId,
+          timestamp: DateTime.now(),
+          eventType: AlarmEventType.snoozed,
+          metadata: {
+            'snoozeCount': alarm.snoozeCount,
+          },
+        ),
+      );
+
       final DateTime newTime =
           DateTime.now().add(Duration(minutes: alarm.snoozeTime));
       await _notificationService.cancelAlarm(alarmId);
@@ -2879,7 +3082,6 @@ class AlarmService {
       await _notificationService.scheduleAlarm(alarm);
     }
     await _saveAlarms();
-    _notifyListeners();
   }
 
   List<Alarm> getActiveAlarms() {
@@ -2892,10 +3094,9 @@ class AlarmService {
         .toList();
   }
 
-   void dispose() {
+  void dispose() {
     _alarmsController.close();
   }
-
 }
 
 
@@ -4985,6 +5186,7 @@ import 'package:provider/provider.dart';
 import 'package:the_good_alarm/configuracion/app_settings.dart';
 import 'package:the_good_alarm/configuracion/theme_provider.dart';
 import 'package:the_good_alarm/screens/home_screen.dart';
+import 'package:the_good_alarm/services/alarm_history_service.dart';
 import 'package:the_good_alarm/services/alarm_service.dart';
 import 'package:logging/logging.dart';
 import 'package:the_good_alarm/services/notification_service.dart';
@@ -5037,11 +5239,12 @@ void main() async {
 
   // Inicializar servicios
   final permissionService = PermissionService();
-  await permissionService.resetTemporarySkip(); // Resetear el estado temporal al inicio
+  await permissionService
+      .resetTemporarySkip(); // Resetear el estado temporal al inicio
 
   final notificationService = NotificationService();
   await notificationService.initialize();
-  
+
   final alarmService = AlarmService();
   await alarmService.initialize();
 
@@ -5050,7 +5253,6 @@ void main() async {
 
   runApp(const MyApp());
 }
-
 
 Future<void> requestPermissions() async {
   // Solicitar los permisos principales
@@ -5223,6 +5425,13 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppSettings()),
         Provider<AlarmService>(create: (_) => AlarmService()),
         Provider<PermissionService>(create: (_) => PermissionService()),
+        Provider<AlarmHistoryService>(
+          create: (_) {
+            final service = AlarmHistoryService();
+            service.initialize(); // Inicializar el servicio
+            return service;
+          },
+        ),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
@@ -5274,6 +5483,1424 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+
+--------------------------------------------------
+
+Ruta al script: lib/screens/active_alarms_screen.dart
+Nombre del script: active_alarms_screen.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:the_good_alarm/widgets/alarm_list_item.dart';
+import '../models/alarm.dart';
+import '../services/alarm_service.dart';
+import './alarm_edit_screen.dart';
+
+class ActiveAlarmsScreen extends StatelessWidget {
+  const ActiveAlarmsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final alarmService = Provider.of<AlarmService>(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Alarmas Activas'),
+        actions: [
+          // Acciones adicionales si se requieren
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              // Navegar a configuración de alarmas activas
+            },
+          ),
+        ],
+      ),
+      body: StreamBuilder<List<Alarm>>(
+        stream: alarmService.activeAlarmsStream,
+        initialData: alarmService.activeAlarms,
+        builder: (context, snapshot) {
+          // Estado de carga
+          // if (snapshot.connectionState == ConnectionState.waiting) {
+          //   return const Center(
+          //     child: CircularProgressIndicator(),
+          //   );
+          // }
+
+          // Error
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    color: Colors.red,
+                    size: 60,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error al cargar alarmas activas',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  Text(snapshot.error.toString()),
+                  ElevatedButton(
+                    onPressed: () => alarmService.initialize(),
+                    child: const Text('Reintentar'),
+                  )
+                ],
+              ),
+            );
+          }
+
+          // Sin alarmas activas
+          final activeAlarms = snapshot.data ?? [];
+          if (activeAlarms.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.alarm_off,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No hay alarmas activas',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Activa algunas alarmas para verlas aquí',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            );
+          }
+
+          // Lista de alarmas activas
+          return ListView.separated(
+            itemCount: activeAlarms.length,
+            separatorBuilder: (context, index) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final alarm = activeAlarms[index];
+              return AlarmListItem(
+                alarm: alarm,
+                onTap: () {
+                  // Navegación a edición de alarma
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AlarmEditScreen(alarm: alarm),
+                    ),
+                  );
+                },
+                onToggle: (enabled) {
+                  alarmService.toggleAlarm(alarm.id);
+                },
+                onDelete: () {
+                  alarmService.deleteAlarm(alarm.id);
+                },
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          // Navegación a creación de nueva alarma
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AlarmEditScreen(),
+            ),
+          );
+        },
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+  
+  void _showDeleteConfirmation(
+    BuildContext context, 
+    AlarmService alarmService, 
+    Alarm alarm
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar Alarma'),
+        content: const Text('¿Estás seguro de eliminar esta alarma?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              alarmService.deleteAlarm(alarm.id);
+              Navigator.pop(context);
+            },
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTime(DateTime time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/screens/home_screen.dart
+Nombre del script: home_screen.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:the_good_alarm/models/alarm_history_entry.dart';
+import 'package:the_good_alarm/screens/active_alarms_screen.dart';
+import 'package:the_good_alarm/screens/alarm_history_screen.dart';
+import 'package:the_good_alarm/screens/day_alarms_screen.dart';
+import 'package:the_good_alarm/services/alarm_history_service.dart';
+import '../models/alarm.dart';
+import '../services/alarm_service.dart';
+import '../configuracion/theme_provider.dart';
+import '../configuracion/app_settings.dart';
+import 'alarm_list_screen.dart';
+import 'alarm_edit_screen.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final alarmService = Provider.of<AlarmService>(context);
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final appSettings = Provider.of<AppSettings>(context);
+
+    return Scaffold(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await alarmService.initialize();
+        },
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 200.0,
+              floating: false,
+              pinned: true,
+              snap: false,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Theme.of(context).colorScheme.primary,
+                        Theme.of(context).colorScheme.primaryContainer,
+                      ],
+                    ),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 40),
+                        _buildNextAlarmInfo(context, alarmService),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                IconButton(
+                  icon: Icon(
+                    themeProvider.themeMode == ThemeMode.dark
+                        ? Icons.light_mode
+                        : Icons.dark_mode,
+                  ),
+                  onPressed: () {
+                    themeProvider.setThemeMode(
+                      themeProvider.themeMode == ThemeMode.dark
+                          ? ThemeMode.light
+                          : ThemeMode.dark,
+                    );
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => _showSettingsDialog(context, appSettings),
+                ),
+              ],
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildQuickActions(context),
+                    const SizedBox(height: 24),
+                    // Añadir la sección de historial diario
+                    Center(
+                    child: Text('Historial Diario',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    ),
+                    const SizedBox(height: 8),
+                    // Añadir la sección de historial diario')
+                    _buildDailyHistory(context),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _createAlarm(context),
+        icon: const Icon(Icons.add),
+        label: const Text('Nueva Alarma'),
+      ),
+    );
+  }
+
+  Widget _buildNextAlarmInfo(BuildContext context, AlarmService alarmService) {
+    return StreamBuilder<List<Alarm>>(
+      stream: alarmService.alarmsStream,
+      initialData: alarmService.alarms,
+      builder: (context, snapshot) {
+        // Manejo de errores
+        if (snapshot.hasError) {
+          return Text(
+            'Error al cargar alarmas',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+
+        // Sin datos o sin alarmas
+        final allAlarms = snapshot.data ?? [];
+        final activeAlarms = allAlarms.where((a) => a.isEnabled).toList();
+
+        if (activeAlarms.isEmpty) {
+          return const Text(
+            'No hay alarmas activas',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+            ),
+          );
+        }
+
+        final nextAlarm = _findNextAlarm(activeAlarms);
+        if (nextAlarm == null) {
+          return const Text(
+            'No hay alarmas activas',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _formatTime(nextAlarm.time),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 48,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Switch(
+                  value: nextAlarm.isEnabled,
+                  onChanged: (bool value) {
+                    alarmService.toggleAlarm(nextAlarm.id);
+                  },
+                  activeColor: Colors.white,
+                  inactiveThumbColor: Colors.grey,
+                ),
+              ],
+            ),
+            Text(
+              _getTimeUntilAlarm(nextAlarm),
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 16,
+              ),
+            ),
+            if (activeAlarms.length > 1)
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ActiveAlarmsScreen(),
+                    ),
+                  );
+                },
+                child: const Text(
+                  'Ver todas las alarmas activas',
+                  style: TextStyle(
+                    color: Colors.white,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickActions(BuildContext context) {
+    return Card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildQuickActionButton(
+                  context,
+                  'Hoy',
+                  Icons.today,
+                  () {
+                    final today = DateTime.now();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DayAlarmsScreen(
+                          selectedDate: today,
+                          screenTitle: 'Alarmas de Hoy',
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                _buildQuickActionButton(
+                  context,
+                  'Mañana',
+                  Icons.calendar_today,
+                  () {
+                    final tomorrow =
+                        DateTime.now().add(const Duration(days: 1));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DayAlarmsScreen(
+                          selectedDate: tomorrow,
+                          screenTitle: 'Alarmas de Mañana',
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                _buildQuickActionButton(
+                  context,
+                  'Todas',
+                  Icons.list,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AlarmListScreen(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+    );
+  }
+
+  Widget _buildQuickActionButton(
+    BuildContext context,
+    String label,
+    IconData icon,
+    VoidCallback onPressed,
+  ) {
+    return Column(
+      children: [
+        IconButton(
+          icon: Icon(icon),
+          onPressed: onPressed,
+          style: IconButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+            foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall,
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUpcomingAlarms(BuildContext context, AlarmService alarmService) {
+    return StreamBuilder<List<Alarm>>(
+      stream: alarmService.alarmsStream,
+      initialData: alarmService.alarms,
+      builder: (context, snapshot) {
+        // Error
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  color: Colors.red,
+                  size: 60,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Error al cargar alarmas',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                Text(snapshot.error.toString()),
+                ElevatedButton(
+                  onPressed: () => alarmService.initialize(),
+                  child: const Text('Reintentar'),
+                )
+              ],
+            ),
+          );
+        }
+
+        // Sin alarmas
+        final allAlarms = snapshot.data ?? [];
+        final activeAlarms = allAlarms
+            .where((alarm) => alarm.isEnabled)
+            .toList()
+          ..sort(
+              (a, b) => a.getNextAlarmTime().compareTo(b.getNextAlarmTime()));
+
+        if (activeAlarms.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.alarm_off,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No hay alarmas configuradas',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Crea tu primera alarma',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Próximas Alarmas',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: activeAlarms.take(3).length,
+              itemBuilder: (context, index) {
+                final alarm = activeAlarms[index];
+                return Card(
+                  child: ListTile(
+                    leading: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _formatTime(alarm.time),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    title: Text(alarm.name.isEmpty ? 'Alarma' : alarm.name),
+                    subtitle: Text(_getTimeUntilAlarm(alarm)),
+                    trailing: alarm.requireGame
+                        ? Icon(
+                            _getGameIcon(alarm.selectedGame),
+                            color: Theme.of(context).colorScheme.primary,
+                          )
+                        : null,
+                    onTap: () => _editAlarm(context, alarm),
+                  ),
+                );
+              },
+            ),
+            if (activeAlarms.length > 3) ...[
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AlarmListScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Ver todas las alarmas'),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Alarm? _findNextAlarm(List<Alarm> alarms) {
+    if (alarms.isEmpty) return null;
+
+    alarms.sort((a, b) {
+      final aNext = a.getNextAlarmTime();
+      final bNext = b.getNextAlarmTime();
+      return aNext.compareTo(bNext);
+    });
+
+    return alarms.first;
+  }
+
+  String _formatTime(DateTime time) {
+    final hours = time.hour.toString().padLeft(2, '0');
+    final minutes = time.minute.toString().padLeft(2, '0');
+    return '$hours:$minutes';
+  }
+
+  String _getTimeUntilAlarm(Alarm alarm) {
+    final now = DateTime.now();
+    final nextAlarmTime = alarm.getNextAlarmTime();
+    final difference = nextAlarmTime.difference(now);
+
+    if (difference.inDays > 0) {
+      return 'En ${difference.inDays} días';
+    } else if (difference.inHours > 0) {
+      return 'En ${difference.inHours} horas';
+    } else if (difference.inMinutes > 0) {
+      return 'En ${difference.inMinutes} minutos';
+    } else {
+      return 'Muy pronto';
+    }
+  }
+
+  IconData _getGameIcon(String? gameType) {
+    switch (gameType) {
+      case 'math':
+        return Icons.calculate;
+      case 'memory':
+        return Icons.grid_view;
+      default:
+        return Icons.games;
+    }
+  }
+
+  void _createAlarm(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AlarmEditScreen(),
+      ),
+    );
+  }
+
+  void _editAlarm(BuildContext context, Alarm alarm) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AlarmEditScreen(alarm: alarm),
+      ),
+    );
+  }
+
+  Future<void> _createQuickAlarm(
+      BuildContext context, Duration duration) async {
+    final now = DateTime.now();
+    final alarmTime = now.add(duration);
+
+    final alarm = Alarm(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      time: alarmTime,
+      isOneTime: true,
+    );
+
+    final alarmService = Provider.of<AlarmService>(context, listen: false);
+    await alarmService.addAlarm(alarm);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Alarma creada para ${_formatTime(alarmTime)}',
+          ),
+          action: SnackBarAction(
+            label: 'DESHACER',
+            onPressed: () => alarmService.deleteAlarm(alarm.id),
+          ),
+        ),
+      );
+    }
+  }
+
+  void _showSettingsDialog(BuildContext context, AppSettings settings) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Configuración'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              title: const Text('Formato de hora'),
+              subtitle: Text(
+                settings.timeFormat == TimeFormat.h24 ? '24 horas' : '12 horas',
+              ),
+              trailing: Switch(
+                value: settings.timeFormat == TimeFormat.h24,
+                onChanged: (value) {
+                  settings.setTimeFormat(
+                    value ? TimeFormat.h24 : TimeFormat.h12,
+                  );
+                },
+              ),
+            ),
+            ListTile(
+              title: const Text('Método de entrada'),
+              subtitle: Text(
+                settings.inputFormat == InputFormat.numpad
+                    ? 'Teclado numérico'
+                    : 'Selector circular',
+              ),
+              trailing: Switch(
+                value: settings.inputFormat == InputFormat.numpad,
+                onChanged: (value) {
+                  settings.setInputFormat(
+                    value ? InputFormat.numpad : InputFormat.circular,
+                  );
+                },
+              ),
+            ),
+            ListTile(
+              title: const Text('Volumen de alarma'),
+              subtitle: Slider(
+                value: settings.alarmVolume,
+                onChanged: settings.setAlarmVolume,
+                divisions: 10,
+                label: '${(settings.alarmVolume * 100).round()}%',
+              ),
+            ),
+            ListTile(
+              title: const Text('Vibración'),
+              trailing: Switch(
+                value: settings.vibrationEnabled,
+                onChanged: settings.setVibrationEnabled,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDailyHistory(BuildContext context) {
+    final alarmHistoryService = Provider.of<AlarmHistoryService>(context);
+    final today = DateTime.now();
+
+    // Filtrar entradas de historial del día de hoy
+    final todayEntries = alarmHistoryService.getAllHistory().where((entry) {
+      return isSameDay(entry.timestamp, today);
+    }).toList();
+
+    if (todayEntries.isEmpty) {
+      return const SizedBox.shrink(); // No mostrar nada si no hay historial
+    }
+
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              'Historial de Hoy',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: todayEntries.length,
+            itemBuilder: (context, index) {
+              final entry = todayEntries[index];
+              return ListTile(
+                title: Text(_getEventTitle(entry.eventType)),
+                subtitle: Text('Alarma: ${entry.alarmId}'),
+                trailing: Text(_formatTime(entry.timestamp)),
+              );
+            },
+          ),
+          Center(
+            child: TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AlarmHistoryScreen(),
+                  ),
+                );
+              },
+              child: const Text('Ver historial completo'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Método de ayuda para formatear el título del evento
+  String _getEventTitle(AlarmEventType eventType) {
+    switch (eventType) {
+      case AlarmEventType.created:
+        return 'Alarma Creada';
+      case AlarmEventType.activated:
+        return 'Alarma Activada';
+      case AlarmEventType.deactivated:
+        return 'Alarma Desactivada';
+      case AlarmEventType.triggered:
+        return 'Alarma Sonó';
+      case AlarmEventType.snoozed:
+        return 'Alarma Pospuesta';
+      case AlarmEventType.stopped:
+        return 'Alarma Detenida';
+      case AlarmEventType.dismissed:
+        return 'Alarma Omitida';
+      default:
+        return eventType.toString();
+    }
+  }
+
+  // Método de ayuda para comparar fechas
+  bool isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
+  }
+}
+
+
+--------------------------------------------------
+
+Ruta al script: lib/models/alarm_history_entry.dart
+Nombre del script: alarm_history_entry.dart
+Contenido del script:
+enum AlarmEventType {
+  created,      // Alarma creada
+  activated,    // Alarma activada
+  deactivated,  // Alarma desactivada
+  triggered,    // Alarma sonó
+  snoozed,      // Alarma pospuesta
+  stopped,      // Alarma detenida
+  dismissed,    // Alarma omitida
+}
+
+class AlarmHistoryEntry {
+  final String alarmId;
+  final DateTime timestamp;
+  final AlarmEventType eventType;
+  final Map<String, dynamic> metadata;
+
+  AlarmHistoryEntry({
+    required this.alarmId,
+    required this.timestamp,
+    required this.eventType,
+    this.metadata = const {},
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'alarmId': alarmId,
+      'timestamp': timestamp.toIso8601String(),
+      'eventType': eventType.toString(),
+      'metadata': metadata,
+    };
+  }
+
+  factory AlarmHistoryEntry.fromJson(Map<String, dynamic> json) {
+    return AlarmHistoryEntry(
+      alarmId: json['alarmId'],
+      timestamp: DateTime.parse(json['timestamp']),
+      eventType: AlarmEventType.values.firstWhere(
+        (e) => e.toString() == json['eventType'],
+      ),
+      metadata: Map<String, dynamic>.from(json['metadata'] ?? {}),
+    );
+  }
+}
+
+
+
+--------------------------------------------------
+
+Ruta al script: lib/models/time_interval_settings.dart
+Nombre del script: time_interval_settings.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class TimeIntervalSettings {
+  late TimeOfDay morningStart;
+  late TimeOfDay morningEnd;
+  late TimeOfDay afternoonStart;
+  late TimeOfDay afternoonEnd;
+  late TimeOfDay nightStart;
+  late TimeOfDay nightEnd;
+
+  TimeIntervalSettings({
+    TimeOfDay? morningStart,
+    TimeOfDay? morningEnd,
+    TimeOfDay? afternoonStart,
+    TimeOfDay? afternoonEnd,
+    TimeOfDay? nightStart,
+    TimeOfDay? nightEnd,
+  }) {
+    this.morningStart = morningStart ?? const TimeOfDay(hour: 5, minute: 0);
+    this.morningEnd = morningEnd ?? const TimeOfDay(hour: 11, minute: 59);
+    this.afternoonStart = afternoonStart ?? const TimeOfDay(hour: 12, minute: 0);
+    this.afternoonEnd = afternoonEnd ?? const TimeOfDay(hour: 20, minute: 59);
+    this.nightStart = nightStart ?? const TimeOfDay(hour: 21, minute: 0);
+    this.nightEnd = nightEnd ?? const TimeOfDay(hour: 4, minute: 59);
+  }
+
+  Future<void> save() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('morningStartHour', morningStart.hour);
+    await prefs.setInt('morningStartMinute', morningStart.minute);
+    await prefs.setInt('morningEndHour', morningEnd.hour);
+    await prefs.setInt('morningEndMinute', morningEnd.minute);
+    await prefs.setInt('afternoonStartHour', afternoonStart.hour);
+    await prefs.setInt('afternoonStartMinute', afternoonStart.minute);
+    await prefs.setInt('afternoonEndHour', afternoonEnd.hour);
+    await prefs.setInt('afternoonEndMinute', afternoonEnd.minute);
+    await prefs.setInt('nightStartHour', nightStart.hour);
+    await prefs.setInt('nightStartMinute', nightStart.minute);
+    await prefs.setInt('nightEndHour', nightEnd.hour);
+    await prefs.setInt('nightEndMinute', nightEnd.minute);
+  }
+
+  static Future<TimeIntervalSettings> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    return TimeIntervalSettings(
+      morningStart: TimeOfDay(
+        hour: prefs.getInt('morningStartHour') ?? 5,
+        minute: prefs.getInt('morningStartMinute') ?? 0,
+      ),
+      morningEnd: TimeOfDay(
+        hour: prefs.getInt('morningEndHour') ?? 11,
+        minute: prefs.getInt('morningEndMinute') ?? 59,
+      ),
+      afternoonStart: TimeOfDay(
+        hour: prefs.getInt('afternoonStartHour') ?? 12,
+        minute: prefs.getInt('afternoonStartMinute') ?? 0,
+      ),
+      afternoonEnd: TimeOfDay(
+        hour: prefs.getInt('afternoonEndHour') ?? 20,
+        minute: prefs.getInt('afternoonEndMinute') ?? 59,
+      ),
+      nightStart: TimeOfDay(
+        hour: prefs.getInt('nightStartHour') ?? 21,
+        minute: prefs.getInt('nightStartMinute') ?? 0,
+      ),
+      nightEnd: TimeOfDay(
+        hour: prefs.getInt('nightEndHour') ?? 4,
+        minute: prefs.getInt('nightEndMinute') ?? 59,
+      ),
+    );
+  }
+
+  bool isValidConfiguration() {
+    // Mejorar la validación para manejar intervalos que cruzan la media noche
+    return _validateInterval(morningStart, morningEnd) &&
+           _validateInterval(afternoonStart, afternoonEnd) &&
+           _validateInterval(nightStart, nightEnd) &&
+           !_intervalsOverlap();
+  }
+
+  bool _validateInterval(TimeOfDay start, TimeOfDay end) {
+    // Convertir a minutos desde media noche
+    int startMinutes = start.hour * 60 + start.minute;
+    int endMinutes = end.hour * 60 + end.minute;
+
+    // Manejar caso de intervalo que cruza la media noche
+    if (endMinutes < startMinutes) {
+      endMinutes += 24 * 60;
+    }
+
+    return startMinutes < endMinutes;
+  }
+
+  bool _intervalsOverlap() {
+    // Convertir todos los intervalos a minutos desde media noche
+    List<int> morningMinutes = _intervalToMinutes(morningStart, morningEnd);
+    List<int> afternoonMinutes = _intervalToMinutes(afternoonStart, afternoonEnd);
+    List<int> nightMinutes = _intervalToMinutes(nightStart, nightEnd);
+
+    // Verificar si hay intersecciones
+    return _hasOverlap(morningMinutes, afternoonMinutes) ||
+           _hasOverlap(morningMinutes, nightMinutes) ||
+           _hasOverlap(afternoonMinutes, nightMinutes);
+  }
+
+  List<int> _intervalToMinutes(TimeOfDay start, TimeOfDay end) {
+    int startMinutes = start.hour * 60 + start.minute;
+    int endMinutes = end.hour * 60 + end.minute;
+
+    // Manejar caso de intervalo que cruza la media noche
+    if (endMinutes < startMinutes) {
+      endMinutes += 24 * 60;
+    }
+
+    return [startMinutes, endMinutes];
+  }
+
+  bool _hasOverlap(List<int> interval1, List<int> interval2) {
+    return !(interval1[1] < interval2[0] || interval2[1] < interval1[0]);
+  }
+
+  // Método para convertir TimeOfDay a minutos desde media noche
+  int _timeOfDayToMinutes(TimeOfDay time) {
+    return time.hour * 60 + time.minute;
+  }
+
+  // Método para convertir minutos a TimeOfDay
+  TimeOfDay _minutesToTimeOfDay(int minutes) {
+    int adjustedMinutes = minutes % (24 * 60);
+    return TimeOfDay(
+      hour: adjustedMinutes ~/ 60,
+      minute: adjustedMinutes % 60,
+    );
+  }
+
+  // Método para ajustar un intervalo de tiempo
+  TimeIntervalSettings adjustInterval({
+    TimeOfDay? morningStart,
+    TimeOfDay? morningEnd,
+    TimeOfDay? afternoonStart,
+    TimeOfDay? afternoonEnd,
+    TimeOfDay? nightStart,
+    TimeOfDay? nightEnd,
+  }) {
+    return TimeIntervalSettings(
+      morningStart: morningStart ?? this.morningStart,
+      morningEnd: morningEnd ?? this.morningEnd,
+      afternoonStart: afternoonStart ?? this.afternoonStart,
+      afternoonEnd: afternoonEnd ?? this.afternoonEnd,
+      nightStart: nightStart ?? this.nightStart,
+      nightEnd: nightEnd ?? this.nightEnd,
+    );
+  }
+
+  // Método para dividir un intervalo de tiempo en segmentos
+  List<TimeOfDay> splitInterval(TimeOfDay start, TimeOfDay end, int segments) {
+    int startMinutes = _timeOfDayToMinutes(start);
+    int endMinutes = _timeOfDayToMinutes(end);
+
+    // Manejar caso de intervalo que cruza la media noche
+    if (endMinutes < startMinutes) {
+      endMinutes += 24 * 60;
+    }
+
+    int intervalMinutes = endMinutes - startMinutes;
+    int segmentSize = intervalMinutes ~/ segments;
+
+    return List.generate(segments + 1, (index) {
+      int currentMinutes = startMinutes + (index * segmentSize);
+      return _minutesToTimeOfDay(currentMinutes);
+    });
+  }
+
+  // Método para encontrar el intervalo al que pertenece un TimeOfDay
+  String getIntervalName(TimeOfDay time) {
+    int minutes = _timeOfDayToMinutes(time);
+
+    if (_isTimeInInterval(time, morningStart, morningEnd)) {
+      return 'morning';
+    } else if (_isTimeInInterval(time, afternoonStart, afternoonEnd)) {
+      return 'afternoon';
+    } else if (_isTimeInInterval(time, nightStart, nightEnd)) {
+      return 'night';
+    }
+
+    return 'unknown';
+  }
+
+  // Método auxiliar para verificar si un tiempo está en un intervalo
+  bool _isTimeInInterval(TimeOfDay time, TimeOfDay start, TimeOfDay end) {
+    int timeMinutes = _timeOfDayToMinutes(time);
+    int startMinutes = _timeOfDayToMinutes(start);
+    int endMinutes = _timeOfDayToMinutes(end);
+
+    // Manejar caso de intervalo que cruza la media noche
+    if (endMinutes < startMinutes) {
+      return timeMinutes >= startMinutes || timeMinutes <= endMinutes;
+    }
+
+    return timeMinutes >= startMinutes && timeMinutes <= endMinutes;
+  }
+}
+
+
+--------------------------------------------------
+
+Ruta al script: lib/screens/alarm_history_screen.dart
+Nombre del script: alarm_history_screen.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import '../services/alarm_history_service.dart';
+import '../models/alarm_history_entry.dart';
+
+class AlarmHistoryScreen extends StatelessWidget {
+  AlarmHistoryScreen({super.key}); // Añadir key y hacerlo const
+  final AlarmHistoryService _historyService = AlarmHistoryService();
+
+  @override
+  Widget build(BuildContext context) {
+    final historyEntries = _historyService.getAllHistory();
+
+    return Scaffold(
+      appBar: AppBar(title: Text('Historial de Alarmas')),
+      body: ListView.builder(
+        itemCount: historyEntries.length,
+        itemBuilder: (context, index) {
+          final entry = historyEntries[index];
+          return ListTile(
+            title: Text(_getEventTitle(entry.eventType)),
+            subtitle: Text('Alarma: ${entry.alarmId}'),
+            trailing: Text(_formatDateTime(entry.timestamp)),
+          );
+        },
+      ),
+    );
+  }
+
+  String _getEventTitle(AlarmEventType eventType) {
+    switch (eventType) {
+      case AlarmEventType.created:
+        return 'Alarma Creada';
+      case AlarmEventType.snoozed:
+        return 'Alarma Pospuesta';
+      // Añade más casos según sea necesario
+      default:
+        return eventType.toString();
+    }
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    // Implementa un formato de fecha personalizado
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute}';
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/screens/day_alarms_screen.dart
+Nombre del script: day_alarms_screen.dart
+Contenido del script:
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/alarm.dart';
+import '../services/alarm_service.dart';
+import '../widgets/alarm_list_item.dart';
+import 'alarm_edit_screen.dart';
+
+class DayAlarmsScreen extends StatelessWidget {
+  final DateTime selectedDate;
+  final String screenTitle;
+
+  const DayAlarmsScreen({
+    super.key,
+    required this.selectedDate,
+    required this.screenTitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final alarmService = Provider.of<AlarmService>(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(screenTitle),
+        actions: [
+          // Filtro o acciones adicionales si se requieren
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          // Método para recargar las alarmas manualmente
+          await alarmService.initialize();
+        },
+        child: StreamBuilder<List<Alarm>>(
+          stream: alarmService.alarmsStream,
+          initialData: alarmService.alarms,
+          builder: (context, snapshot) {
+            // Error
+            if (snapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 60,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Error al cargar alarmas',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    Text(snapshot.error.toString()),
+                    ElevatedButton(
+                      onPressed: () => alarmService.initialize(),
+                      child: const Text('Reintentar'),
+                    )
+                  ],
+                ),
+              );
+            }
+
+            // Sin alarmas para el día
+            final dayAlarms = snapshot.data?.where((alarm) {
+              return alarm.isEnabled && _isAlarmForDay(alarm, selectedDate);
+            }).toList() ?? [];
+
+            if (dayAlarms.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.alarm_off,
+                      size: 64,
+                      color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No hay alarmas para este día',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Crea tu primera alarma para este día',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            // Lista de alarmas para el día
+            return ListView.separated(
+              itemCount: dayAlarms.length,
+              separatorBuilder: (context, index) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final alarm = dayAlarms[index];
+                return Dismissible(
+                  key: Key(alarm.id),
+                  background: Container(
+                    color: Colors.red,
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    child: const Icon(
+                      Icons.delete,
+                      color: Colors.white,
+                    ),
+                  ),
+                  direction: DismissDirection.endToStart,
+                  confirmDismiss: (direction) async {
+                    // Diálogo de confirmación
+                    return await showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Eliminar Alarma'),
+                        content: const Text('¿Estás seguro de eliminar esta alarma?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('Cancelar'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: const Text('Eliminar'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  onDismissed: (direction) {
+                    alarmService.deleteAlarm(alarm.id);
+                  },
+                  child: AlarmListItem(
+                    alarm: alarm,
+                    onTap: () {
+                      // Navegación a edición de alarma
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AlarmEditScreen(alarm: alarm),
+                        ),
+                      );
+                    },
+                    onToggle: (enabled) {
+                      alarmService.toggleAlarm(alarm.id);
+                    },
+                    onDelete: () {
+                      alarmService.deleteAlarm(alarm.id);
+                    },
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          // Navegación a creación de nueva alarma
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AlarmEditScreen(),
+            ),
+          );
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Nueva Alarma'),
+      ),
+    );
+  }
+
+  bool _isAlarmForDay(Alarm alarm, DateTime targetDate) {
+    if (alarm.isOneTime) {
+      return _isSameDay(alarm.time, targetDate);
+    } else {
+      return alarm.weekDays[targetDate.weekday - 1];
+    }
+  }
+
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+           date1.month == date2.month &&
+           date1.day == date2.day;
+  }
+}
+
+--------------------------------------------------
+
+Ruta al script: lib/services/alarm_history_service.dart
+Nombre del script: alarm_history_service.dart
+Contenido del script:
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:the_good_alarm/models/alarm_history_entry.dart';
+
+class AlarmHistoryService {
+  static final AlarmHistoryService _instance = AlarmHistoryService._internal();
+  factory AlarmHistoryService() => _instance;
+  AlarmHistoryService._internal();
+
+  static const String _storageKey = 'alarm_history_entries';
+  late SharedPreferences _prefs;
+  List<AlarmHistoryEntry> _historyEntries = [];
+
+  Future<void> initialize() async {
+    _prefs = await SharedPreferences.getInstance();
+    await _loadHistoryEntries();
+  }
+
+  Future<void> _loadHistoryEntries() async {
+    final String? entriesJson = _prefs.getString(_storageKey);
+    if (entriesJson != null) {
+      final List<dynamic> entriesList = jsonDecode(entriesJson);
+      _historyEntries = entriesList
+          .map((json) => AlarmHistoryEntry.fromJson(json))
+          .toList();
+    }
+  }
+
+  Future<void> _saveHistoryEntries() async {
+    final String entriesJson = jsonEncode(
+      _historyEntries.map((entry) => entry.toJson()).toList(),
+    );
+    await _prefs.setString(_storageKey, entriesJson);
+  }
+
+  Future<void> addHistoryEntry(AlarmHistoryEntry entry) async {
+    _historyEntries.add(entry);
+    
+    // Mantener solo los últimos 100 registros
+    if (_historyEntries.length > 100) {
+      _historyEntries.removeRange(0, _historyEntries.length - 100);
+    }
+
+    await _saveHistoryEntries();
+  }
+
+  List<AlarmHistoryEntry> getHistoryForAlarm(String alarmId) {
+    return _historyEntries
+        .where((entry) => entry.alarmId == alarmId)
+        .toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  List<AlarmHistoryEntry> getAllHistory() {
+    return List.from(_historyEntries)
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+}
 
 --------------------------------------------------
 

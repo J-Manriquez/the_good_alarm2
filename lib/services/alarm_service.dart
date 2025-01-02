@@ -1,14 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:the_good_alarm/models/alarm_history_entry.dart';
 import '../models/alarm.dart';
 import 'notification_service.dart';
+import 'package:the_good_alarm/services/alarm_history_service.dart';
 
 class AlarmService {
   static final AlarmService _instance = AlarmService._internal();
   factory AlarmService() => _instance;
   AlarmService._internal() {
-    // Añadir esto para asegurar que el stream esté inicializado
     _initializeStream();
   }
 
@@ -17,22 +19,37 @@ class AlarmService {
   late SharedPreferences _prefs;
   List<Alarm> _alarms = [];
 
-  // Convertir a un broadcast StreamController
-  var _alarmsController = StreamController<List<Alarm>>.broadcast(sync: true);
+  // Usar un BehaviorSubject para mantener el último estado
+  late StreamController<List<Alarm>> _alarmsController =
+      StreamController<List<Alarm>>.broadcast();
   Stream<List<Alarm>> get alarmsStream => _alarmsController.stream;
+
+  // Stream específico para alarmas activas
+  Stream<List<Alarm>> get activeAlarmsStream => alarmsStream
+      .map((allAlarms) => allAlarms.where((alarm) => alarm.isEnabled).toList());
 
   // Getter para la lista de alarmas
   List<Alarm> get alarms => List.unmodifiable(_alarms);
 
+  // Getter para alarmas activas
+  List<Alarm> get activeAlarms =>
+      _alarms.where((alarm) => alarm.isEnabled).toList();
+
+  final AlarmHistoryService _alarmHistoryService = AlarmHistoryService();
+
   Future<void> initialize() async {
-    _prefs = await SharedPreferences.getInstance();
-    await _loadAlarms();
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      await _loadAlarms();
+    } catch (e) {
+      debugPrint('Error inicializando AlarmService: $e');
+      _notifyListeners(); // Notificar incluso en caso de error
+    }
   }
 
-  // Nuevo método para inicializar el stream
   void _initializeStream() {
     if (_alarmsController.isClosed) {
-      _alarmsController = StreamController<List<Alarm>>.broadcast(sync: true);
+      _alarmsController = StreamController<List<Alarm>>.broadcast();
     }
   }
 
@@ -59,10 +76,9 @@ class AlarmService {
         _alarms = [];
       }
 
-      // Añadir esto para asegurar que el stream se actualice
       _notifyListeners();
     } catch (e) {
-      print('Error al cargar alarmas: $e');
+      debugPrint('Error al cargar alarmas: $e');
       _alarms = [];
       _notifyListeners();
     }
@@ -75,12 +91,21 @@ class AlarmService {
       await _prefs.setString(_storageKey, alarmsJson);
       _notifyListeners();
     } catch (e) {
-      print('Error al guardar alarmas: $e');
+      debugPrint('Error al guardar alarmas: $e');
     }
   }
 
   Future<void> addAlarm(Alarm alarm) async {
     _alarms.add(alarm);
+    // Registrar evento de creación
+    await _alarmHistoryService.addHistoryEntry(
+      AlarmHistoryEntry(
+        alarmId: alarm.id,
+        timestamp: DateTime.now(),
+        eventType: AlarmEventType.created,
+      ),
+    );
+
     if (alarm.isEnabled) {
       await _notificationService.scheduleAlarm(alarm);
     }
@@ -119,6 +144,7 @@ class AlarmService {
       }
 
       await _saveAlarms();
+      _notifyListeners();
     }
   }
 
@@ -126,6 +152,19 @@ class AlarmService {
     final alarm = _alarms.firstWhere((a) => a.id == alarmId);
     if (alarm.canSnooze()) {
       alarm.incrementSnoozeCount();
+      alarm.totalTimesSnoozed++;
+
+      await _alarmHistoryService.addHistoryEntry(
+        AlarmHistoryEntry(
+          alarmId: alarmId,
+          timestamp: DateTime.now(),
+          eventType: AlarmEventType.snoozed,
+          metadata: {
+            'snoozeCount': alarm.snoozeCount,
+          },
+        ),
+      );
+
       final DateTime newTime =
           DateTime.now().add(Duration(minutes: alarm.snoozeTime));
       await _notificationService.cancelAlarm(alarmId);
@@ -142,7 +181,6 @@ class AlarmService {
       await _notificationService.scheduleAlarm(alarm);
     }
     await _saveAlarms();
-    _notifyListeners();
   }
 
   List<Alarm> getActiveAlarms() {
@@ -155,8 +193,7 @@ class AlarmService {
         .toList();
   }
 
-   void dispose() {
+  void dispose() {
     _alarmsController.close();
   }
-
 }

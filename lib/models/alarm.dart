@@ -14,6 +14,9 @@ class Alarm {
   String? gameDifficulty; // 'easy', 'medium', 'hard'
   bool requireGame;
   final bool useVibration;
+  int totalTimesTriggered;
+  int totalTimesStopped;
+  int totalTimesSnoozed;
   
   Alarm({
     required this.id,
@@ -29,6 +32,9 @@ class Alarm {
     this.gameDifficulty,
     this.requireGame = false,
     this.useVibration = true,
+    this.totalTimesTriggered = 0,
+    this.totalTimesStopped = 0,
+    this.totalTimesSnoozed = 0,
   }) : weekDays = weekDays ?? List.filled(7, false);
 
   // Copia del objeto con posibles modificaciones
@@ -79,6 +85,9 @@ class Alarm {
       'gameDifficulty': gameDifficulty,
       'requireGame': requireGame,
       'useVibration': useVibration,
+      'totalTimesTriggered': totalTimesTriggered,
+      'totalTimesStopped': totalTimesStopped,
+      'totalTimesSnoozed': totalTimesSnoozed,
     };
   }
 
@@ -98,6 +107,9 @@ class Alarm {
       gameDifficulty: json['gameDifficulty'],
       requireGame: json['requireGame'],
       useVibration: json['useVibration'] ?? true,
+      totalTimesTriggered: json['totalTimesTriggered'] ?? 0,
+      totalTimesStopped: json['totalTimesStopped'] ?? 0,
+      totalTimesSnoozed: json['totalTimesSnoozed'] ?? 0,
     );
   }
 

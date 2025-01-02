@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:the_good_alarm/models/alarm_history_entry.dart';
 import 'package:the_good_alarm/screens/active_alarms_screen.dart';
+import 'package:the_good_alarm/screens/alarm_history_screen.dart';
+import 'package:the_good_alarm/screens/day_alarms_screen.dart';
+import 'package:the_good_alarm/services/alarm_history_service.dart';
 import '../models/alarm.dart';
 import '../services/alarm_service.dart';
 import '../configuracion/theme_provider.dart';
@@ -23,77 +27,83 @@ class _HomeScreenState extends State<HomeScreen> {
     final appSettings = Provider.of<AppSettings>(context);
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          // Modificado SliverAppBar
-          SliverAppBar(
-            expandedHeight: 200.0,
-            floating: false,
-            pinned: true,
-            // Cambiar a false para que aparezca contraído por defecto
-            snap: false,
-            // Eliminar título
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Theme.of(context).colorScheme.primary,
-                      Theme.of(context).colorScheme.primaryContainer,
-                    ],
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await alarmService.initialize();
+        },
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 200.0,
+              floating: false,
+              pinned: true,
+              snap: false,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Theme.of(context).colorScheme.primary,
+                        Theme.of(context).colorScheme.primaryContainer,
+                      ],
+                    ),
                   ),
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 40),
-                      _buildNextAlarmInfo(context, alarmService),
-                    ],
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 40),
+                        _buildNextAlarmInfo(context, alarmService),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            actions: [
-              // Botón de tema
-              IconButton(
-                icon: Icon(
-                  themeProvider.themeMode == ThemeMode.dark
-                      ? Icons.light_mode
-                      : Icons.dark_mode,
-                ),
-                onPressed: () {
-                  themeProvider.setThemeMode(
+              actions: [
+                IconButton(
+                  icon: Icon(
                     themeProvider.themeMode == ThemeMode.dark
-                        ? ThemeMode.light
-                        : ThemeMode.dark,
-                  );
-                },
-              ),
-              // Botón de configuración
-              IconButton(
-                icon: const Icon(Icons.settings),
-                onPressed: () => _showSettingsDialog(context, appSettings),
-              ),
-            ],
-          ),
-          // Contenido principal (sin cambios)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildQuickActions(context),
-                  const SizedBox(height: 24),
-                  _buildUpcomingAlarms(context, alarmService),
-                ],
+                        ? Icons.light_mode
+                        : Icons.dark_mode,
+                  ),
+                  onPressed: () {
+                    themeProvider.setThemeMode(
+                      themeProvider.themeMode == ThemeMode.dark
+                          ? ThemeMode.light
+                          : ThemeMode.dark,
+                    );
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => _showSettingsDialog(context, appSettings),
+                ),
+              ],
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildQuickActions(context),
+                    const SizedBox(height: 24),
+                    // Añadir la sección de historial diario
+                    Center(
+                    child: Text('Historial Diario',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    ),
+                    const SizedBox(height: 8),
+                    // Añadir la sección de historial diario')
+                    _buildDailyHistory(context),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _createAlarm(context),
@@ -106,18 +116,24 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildNextAlarmInfo(BuildContext context, AlarmService alarmService) {
     return StreamBuilder<List<Alarm>>(
       stream: alarmService.alarmsStream,
+      initialData: alarmService.alarms,
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Text(
-            'No hay alarmas programadas',
+        // Manejo de errores
+        if (snapshot.hasError) {
+          return Text(
+            'Error al cargar alarmas',
             style: TextStyle(
               color: Colors.white,
               fontSize: 18,
+              backgroundColor: Colors.red,
             ),
           );
         }
 
-        final activeAlarms = snapshot.data!.where((a) => a.isEnabled).toList();
+        // Sin datos o sin alarmas
+        final allAlarms = snapshot.data ?? [];
+        final activeAlarms = allAlarms.where((a) => a.isEnabled).toList();
+
         if (activeAlarms.isEmpty) {
           return const Text(
             'No hay alarmas activas',
@@ -196,34 +212,50 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildQuickActions(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Acciones Rápidas',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildQuickActionButton(
                   context,
-                  'Alarma para mañana',
-                  Icons.alarm_add,
-                  () => _createQuickAlarm(context, const Duration(days: 1)),
+                  'Hoy',
+                  Icons.today,
+                  () {
+                    final today = DateTime.now();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DayAlarmsScreen(
+                          selectedDate: today,
+                          screenTitle: 'Alarmas de Hoy',
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 _buildQuickActionButton(
                   context,
-                  'En 1 hora',
-                  Icons.hourglass_bottom,
-                  () => _createQuickAlarm(context, const Duration(hours: 1)),
+                  'Mañana',
+                  Icons.calendar_today,
+                  () {
+                    final tomorrow =
+                        DateTime.now().add(const Duration(days: 1));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DayAlarmsScreen(
+                          selectedDate: tomorrow,
+                          screenTitle: 'Alarmas de Mañana',
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 _buildQuickActionButton(
                   context,
-                  'Todas las alarmas',
+                  'Todas',
                   Icons.list,
                   () => Navigator.push(
                     context,
@@ -236,7 +268,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-      ),
     );
   }
 
@@ -269,13 +300,43 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildUpcomingAlarms(BuildContext context, AlarmService alarmService) {
     return StreamBuilder<List<Alarm>>(
       stream: alarmService.alarmsStream,
+      initialData: alarmService.alarms,
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+        // Error
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  color: Colors.red,
+                  size: 60,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Error al cargar alarmas',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                Text(snapshot.error.toString()),
+                ElevatedButton(
+                  onPressed: () => alarmService.initialize(),
+                  child: const Text('Reintentar'),
+                )
+              ],
+            ),
+          );
         }
-        final alarms = snapshot.data ?? [];
 
-        if (snapshot.data!.isEmpty) {
+        // Sin alarmas
+        final allAlarms = snapshot.data ?? [];
+        final activeAlarms = allAlarms
+            .where((alarm) => alarm.isEnabled)
+            .toList()
+          ..sort(
+              (a, b) => a.getNextAlarmTime().compareTo(b.getNextAlarmTime()));
+
+        if (activeAlarms.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -292,16 +353,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: Theme.of(context).colorScheme.primary,
                       ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  'Crea tu primera alarma',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
               ],
             ),
           );
         }
-
-        final activeAlarms = snapshot.data!
-            .where((alarm) => alarm.isEnabled)
-            .toList()
-          ..sort(
-              (a, b) => a.getNextAlarmTime().compareTo(b.getNextAlarmTime()));
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,17 +426,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Alarm? _findNextAlarm(List<Alarm> alarms) {
-    final now = DateTime.now();
-    final activeAlarms = alarms.where((alarm) => alarm.isEnabled).toList();
-    if (activeAlarms.isEmpty) return null;
+    if (alarms.isEmpty) return null;
 
-    activeAlarms.sort((a, b) {
+    alarms.sort((a, b) {
       final aNext = a.getNextAlarmTime();
       final bNext = b.getNextAlarmTime();
       return aNext.compareTo(bNext);
     });
 
-    return activeAlarms.first;
+    return alarms.first;
   }
 
   String _formatTime(DateTime time) {
@@ -524,5 +582,89 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildDailyHistory(BuildContext context) {
+    final alarmHistoryService = Provider.of<AlarmHistoryService>(context);
+    final today = DateTime.now();
+
+    // Filtrar entradas de historial del día de hoy
+    final todayEntries = alarmHistoryService.getAllHistory().where((entry) {
+      return isSameDay(entry.timestamp, today);
+    }).toList();
+
+    if (todayEntries.isEmpty) {
+      return const SizedBox.shrink(); // No mostrar nada si no hay historial
+    }
+
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              'Historial de Hoy',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: todayEntries.length,
+            itemBuilder: (context, index) {
+              final entry = todayEntries[index];
+              return ListTile(
+                title: Text(_getEventTitle(entry.eventType)),
+                subtitle: Text('Alarma: ${entry.alarmId}'),
+                trailing: Text(_formatTime(entry.timestamp)),
+              );
+            },
+          ),
+          Center(
+            child: TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AlarmHistoryScreen(),
+                  ),
+                );
+              },
+              child: const Text('Ver historial completo'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Método de ayuda para formatear el título del evento
+  String _getEventTitle(AlarmEventType eventType) {
+    switch (eventType) {
+      case AlarmEventType.created:
+        return 'Alarma Creada';
+      case AlarmEventType.activated:
+        return 'Alarma Activada';
+      case AlarmEventType.deactivated:
+        return 'Alarma Desactivada';
+      case AlarmEventType.triggered:
+        return 'Alarma Sonó';
+      case AlarmEventType.snoozed:
+        return 'Alarma Pospuesta';
+      case AlarmEventType.stopped:
+        return 'Alarma Detenida';
+      case AlarmEventType.dismissed:
+        return 'Alarma Omitida';
+      default:
+        return eventType.toString();
+    }
+  }
+
+  // Método de ayuda para comparar fechas
+  bool isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
   }
 }

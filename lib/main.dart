@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:the_good_alarm/configuracion/app_settings.dart';
 import 'package:the_good_alarm/configuracion/theme_provider.dart';
 import 'package:the_good_alarm/screens/home_screen.dart';
+import 'package:the_good_alarm/services/alarm_history_service.dart';
 import 'package:the_good_alarm/services/alarm_service.dart';
 import 'package:logging/logging.dart';
 import 'package:the_good_alarm/services/notification_service.dart';
@@ -60,11 +61,12 @@ void main() async {
 
   // Inicializar servicios
   final permissionService = PermissionService();
-  await permissionService.resetTemporarySkip(); // Resetear el estado temporal al inicio
+  await permissionService
+      .resetTemporarySkip(); // Resetear el estado temporal al inicio
 
   final notificationService = NotificationService();
   await notificationService.initialize();
-  
+
   final alarmService = AlarmService();
   await alarmService.initialize();
 
@@ -73,7 +75,6 @@ void main() async {
 
   runApp(const MyApp());
 }
-
 
 Future<void> requestPermissions() async {
   // Solicitar los permisos principales
@@ -246,6 +247,13 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppSettings()),
         Provider<AlarmService>(create: (_) => AlarmService()),
         Provider<PermissionService>(create: (_) => PermissionService()),
+        Provider<AlarmHistoryService>(
+          create: (_) {
+            final service = AlarmHistoryService();
+            service.initialize(); // Inicializar el servicio
+            return service;
+          },
+        ),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
