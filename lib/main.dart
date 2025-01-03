@@ -258,7 +258,7 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp(
-            title: 'Alarm Game App',
+            title: 'The Good Alarm',
             themeMode: themeProvider.themeMode,
             theme: themeProvider.getLightTheme(),
             darkTheme: themeProvider.getDarkTheme(),

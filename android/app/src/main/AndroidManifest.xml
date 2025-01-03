@@ -33,7 +33,7 @@
     <application
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:label="the_good_alarm"
+        android:label="The Good Alarm"
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="tiramisu">
 
