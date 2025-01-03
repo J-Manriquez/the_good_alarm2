@@ -15,19 +15,28 @@ class AlarmListScreen extends StatefulWidget {
 
 class _AlarmListScreenState extends State<AlarmListScreen> {
   late TimeIntervalSettings _intervalSettings;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadIntervalSettings();
+    _intervalSettings = TimeIntervalSettings();
+    _loadIntervalSettings();
   }
 
   Future<void> _loadIntervalSettings() async {
-    final settings = await TimeIntervalSettings.load();
-    setState(() {
-      _intervalSettings = settings;
-    });
+    try {
+      final settings = await TimeIntervalSettings.load();
+      setState(() {
+        _intervalSettings = settings;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error cargando configuración de intervalos: $e');
+    }
   }
+
 
   String _formatTimeOfDay(TimeOfDay time) {
     return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';

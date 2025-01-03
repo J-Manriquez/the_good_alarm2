@@ -245,7 +245,13 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AppSettings()),
-        Provider<AlarmService>(create: (_) => AlarmService()),
+        ChangeNotifierProvider<AlarmService>(
+          create: (_) {
+            final service = AlarmService();
+            service.initialize(); // Inicializar el servicio
+            return service;
+          },
+        ),
         Provider<PermissionService>(create: (_) => PermissionService()),
         Provider<AlarmHistoryService>(
           create: (_) {

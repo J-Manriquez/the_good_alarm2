@@ -21,30 +21,34 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late ScrollController _scrollController;
-  double _titleOpacity = 0.0;
-  double _expandedInfoOpacity = 1.0;
+  double _titleOpacity = 1.0;
+  double _expandedInfoOpacity = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController()
-      ..addListener(() {
-        // Calcular las opacidades basadas en el scroll
-        final double expandedHeight =
-            200.0; // Altura expandida del SliverAppBar
-        final double scrollPosition = _scrollController.offset;
-        final double appBarHeight = kToolbarHeight;
+    _scrollController = ScrollController();
 
-        setState(() {
-          // Calcular opacidad del título (visible cuando está contraído)
-          _titleOpacity = (scrollPosition / (expandedHeight - appBarHeight))
-              .clamp(0.0, 1.0);
-          // Calcular opacidad de la información expandida
-          _expandedInfoOpacity =
-              (1 - (scrollPosition / (expandedHeight - appBarHeight)))
-                  .clamp(0.0, 1.0);
-        });
+    _scrollController.addListener(() {
+      final double expandedHeight = 200.0;
+      final double scrollPosition = _scrollController.offset;
+      final double appBarHeight = kToolbarHeight;
+
+      setState(() {
+        _titleOpacity =
+            (scrollPosition / (expandedHeight - appBarHeight)).clamp(0.0, 1.0);
+        _expandedInfoOpacity =
+            (1 - (scrollPosition / (expandedHeight - appBarHeight)))
+                .clamp(0.0, 1.0);
       });
+    });
+
+    // Añadir un pequeño delay para asegurar que el scroll inicial funcione
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(200.0);
+      }
+    });
   }
 
   @override
@@ -62,18 +66,26 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: CustomScrollView(
         controller: _scrollController,
+        physics:
+            const AlwaysScrollableScrollPhysics(), // Asegurar que sea scrolleable
         slivers: [
           SliverAppBar(
             expandedHeight: 200.0,
-            floating: false,
+            floating: true,
             pinned: true,
             snap: false,
+            elevation: 4.0, // elevación para mejor visibilidad
+            stretch: true, // Permitir el efecto de estiramiento
             title: AnimatedOpacity(
               opacity: _titleOpacity,
               duration: const Duration(milliseconds: 300),
               child: _buildCollapsedTitle(alarmService),
             ),
             flexibleSpace: FlexibleSpaceBar(
+              stretchModes: const [
+                StretchMode.zoomBackground,
+                StretchMode.blurBackground,
+              ],
               background: AnimatedOpacity(
                 opacity: _expandedInfoOpacity,
                 duration: const Duration(milliseconds: 300),
@@ -500,8 +512,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Alarm? _findNextAlarm(List<Alarm> alarms) {
     if (alarms.isEmpty) return null;
 
+    final now = DateTime.now();
+    final upcomingAlarms =
+        alarms.where((alarm) => alarm.getNextAlarmTime().isAfter(now)).toList();
+
     // Crear una copia mutable de la lista
-    final mutableAlarms = List<Alarm>.from(alarms);
+    final mutableAlarms = List<Alarm>.from(upcomingAlarms);
 
     mutableAlarms.sort((a, b) {
       final aNext = a.getNextAlarmTime();

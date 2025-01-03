@@ -7,7 +7,7 @@ import '../models/alarm.dart';
 import 'notification_service.dart';
 import 'package:the_good_alarm/services/alarm_history_service.dart';
 
-class AlarmService {
+class AlarmService with ChangeNotifier {
   static final AlarmService _instance = AlarmService._internal();
   factory AlarmService() => _instance;
   AlarmService._internal() {
@@ -92,6 +92,7 @@ class AlarmService {
       _notifyListeners();
     } catch (e) {
       debugPrint('Error al guardar alarmas: $e');
+      _notifyListeners();
     }
   }
 
@@ -110,6 +111,7 @@ class AlarmService {
       await _notificationService.scheduleAlarm(alarm);
     }
     await _saveAlarms();
+    _notifyListeners();
   }
 
   Future<void> updateAlarm(Alarm alarm) async {
@@ -121,6 +123,7 @@ class AlarmService {
         await _notificationService.scheduleAlarm(alarm);
       }
       await _saveAlarms();
+      _notifyListeners();
     }
   }
 
@@ -128,6 +131,7 @@ class AlarmService {
     await _notificationService.cancelAlarm(alarmId);
     _alarms.removeWhere((a) => a.id == alarmId);
     await _saveAlarms();
+    _notifyListeners();
   }
 
   Future<void> toggleAlarm(String alarmId) async {
@@ -170,6 +174,7 @@ class AlarmService {
       await _notificationService.cancelAlarm(alarmId);
       await _notificationService.scheduleAlarm(alarm.copyWith(time: newTime));
       await _saveAlarms();
+      _notifyListeners();
     }
   }
 
@@ -181,10 +186,12 @@ class AlarmService {
       await _notificationService.scheduleAlarm(alarm);
     }
     await _saveAlarms();
+    _notifyListeners();
   }
 
   List<Alarm> getActiveAlarms() {
     return _alarms.where((alarm) => alarm.isEnabled).toList();
+    
   }
 
   List<Alarm> getAlarmsForDay(DateTime date) {
@@ -193,7 +200,7 @@ class AlarmService {
         .toList();
   }
 
-  void dispose() {
-    _alarmsController.close();
-  }
+  // void dispose() {
+  //   _alarmsController.close();
+  // }
 }
